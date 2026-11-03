@@ -1,0 +1,24 @@
+{
+  "name": "mcatzp-monorepo",
+  "private": true,
+  "type": "module",
+  "workspaces": [
+    "packages/*"
+  ],
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "bun test",
+    "build": "bun run --filter '@catzoid/mcatzp-protocol' build && bun run --filter '@catzoid/mcatzp-host' build && bun run --filter mcatzp build && bun run --filter '@catzoid/mcatzp-fakecat' build",
+    "fakecat": "bun packages/fakecat/src/index.ts",
+    "dev": "bun packages/server/src/index.ts"
+  },
+  "devDependencies": {
+    "@catzoid/mcatzp-fakecat": "workspace:*",
+    "@catzoid/mcatzp-host": "workspace:*",
+    "@catzoid/mcatzp-protocol": "workspace:*",
+    "@modelcontextprotocol/sdk": "^1.32.0",
+    "@types/bun": "^1.3.0",
+    "@types/node": "^24.0.0",
+    "typescript": "^5.9.3"
+  }
+}

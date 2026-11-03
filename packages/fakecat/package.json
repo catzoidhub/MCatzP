@@ -1,0 +1,15 @@
+{
+  "name": "@catzoid/mcatzp-fakecat",
+  "version": "0.1.0",
+  "private": true,
+  "description": "A stand-in Catzoid app for testing MCatzP without the real apps: a few toys, every tier, dialogs in the terminal.",
+  "license": "Apache-2.0",
+  "type": "module",
+  "exports": { ".": { "bun": "./src/cat.ts", "types": "./src/cat.ts", "default": "./dist/cat.js" } },
+  "bin": { "fakecat": "dist/index.js" },
+  "scripts": { "build": "tsc -p tsconfig.json" },
+  "dependencies": {
+    "@catzoid/mcatzp-host": "workspace:*",
+    "@catzoid/mcatzp-protocol": "workspace:*"
+  }
+}

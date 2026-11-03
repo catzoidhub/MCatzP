@@ -1,0 +1,16 @@
+{
+  "name": "@catzoid/mcatzp-host",
+  "version": "0.1.0",
+  "description": "What a Catzoid app embeds to be reachable by MCatzP: the local channel, token, pairing, tiers, confirmations and activity log.",
+  "license": "Apache-2.0",
+  "type": "module",
+  "exports": {
+    ".": { "bun": "./src/index.ts", "types": "./src/index.ts", "default": "./dist/index.js" }
+  },
+  "files": ["dist"],
+  "scripts": { "build": "tsc -p tsconfig.json" },
+  "dependencies": {
+    "@catzoid/mcatzp-protocol": "workspace:*",
+    "ajv": "^8.17.1"
+  }
+}
