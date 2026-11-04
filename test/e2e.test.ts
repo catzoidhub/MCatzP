@@ -45,6 +45,12 @@ afterAll(async () => {
 });
 
 describe('MCatzP with fakecat', () => {
+  test('the server gives its name and icon', () => {
+    const info = client.getServerVersion();
+    expect(info?.title).toBe('MCatzP');
+    expect(info?.icons?.[0]?.src).toStartWith('data:image/png;base64,');
+  });
+
   test.skipIf(process.platform === 'win32')('the socket and token are owner-only', async () => {
     const entry = cat.host.entry();
     expect(((await stat(entry.channel!)).mode & 0o777).toString(8)).toBe('600');

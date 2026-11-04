@@ -6,6 +6,7 @@ import { CallToolRequestSchema, type CallToolResult, ListToolsRequestSchema, typ
 import { type ActionInfo, ErrorCodes, ProtocolError } from '@catzoid/mcatzp-protocol';
 import { AppConnection } from './connection.js';
 import { type Cat, describeState, discover } from './discovery.js';
+import { ICON } from './icon.js';
 import { VERSION } from './version.js';
 
 /** How long tools/list waits for an app (pairing can take longer; the list then updates by itself). */
@@ -25,7 +26,7 @@ export interface McatzpOptions {
 export function createMcatzpServer(opts: McatzpOptions = {}): { server: Server; close(): void } {
   const env = opts.env ?? process.env;
   const server = new Server(
-    { name: 'mcatzp', title: 'MCatzP', version: VERSION },
+    { name: 'mcatzp', title: 'MCatzP', version: VERSION, icons: [ICON] },
     {
       capabilities: { tools: { listChanged: true } },
       instructions:
