@@ -40,7 +40,8 @@ export interface McatzpInstallProgress {
   total: number;
 }
 
-export type McatzpTargetId = 'claude-code' | 'zcode';
+export const MCATZP_TARGETS = ['claude-code', 'zcode', 'claude-desktop', 'cursor', 'windsurf', 'vscode', 'cline', 'gemini', 'codex'] as const;
+export type McatzpTargetId = (typeof MCATZP_TARGETS)[number];
 
 export interface McatzpTarget {
   id: McatzpTargetId;
@@ -236,46 +237,112 @@ const readJson = (file: string): Record<string, unknown> | null => {
   }
 };
 const claudeFile = (c: Ctx) => join(c.home, '.claude.json');
-const zcodeDir = (c: Ctx) => join(c.home, '.zcode');
-const zcodeFile = (c: Ctx) => join(zcodeDir(c), 'cli', 'config.json');
+const codexFile = (c: Ctx) => join(c.home, '.codex', 'config.toml');
+/** Where desktop apps keep their settings. */
+const appData = (c: Ctx) => (c.win ? (c.env.APPDATA ?? join(c.home, 'AppData', 'Roaming')) : join(c.home, 'Library', 'Application Support'));
+const vscodeUser = (c: Ctx) => join(appData(c), 'Code', 'User');
+const onPath = (c: Ctx, name: string) => pathDirs(c).some((d) => [name, `${name}.exe`, `${name}.cmd`].some((n) => existsSync(join(d, n))));
 
 /** Through its own command, which guards the file Claude Code keeps writing to. A shell: on Windows it may be a .cmd. */
 const claudeCli = (c: Ctx, args: string) =>
   new Promise<{ code: number; output: string }>((resolve) => {
     exec(`claude mcp ${args}`, { cwd: c.home, env: c.env, timeout: 60_000, windowsHide: true }, (err, stdout, stderr) => resolve({ code: err ? 1 : 0, output: `${stdout}${stderr}`.trim() }));
   });
-const hasClaudeCli = (c: Ctx) => pathDirs(c).some((d) => ['claude', 'claude.exe', 'claude.cmd'].some((n) => existsSync(join(d, n))));
+
+/** The assistants that keep their servers in a JSON file: where, under which key, and in what shape. */
+interface JsonClient {
+  id: McatzpTargetId;
+  label: string;
+  found: (c: Ctx) => boolean;
+  file: (c: Ctx) => string;
+  key: string[];
+  entry: (command: string) => Record<string, unknown>;
+}
+const plain = (command: string) => ({ command, args: [], env: {} });
+const typed = (command: string) => ({ type: 'stdio', ...plain(command) });
+const JSON_CLIENTS: JsonClient[] = [
+  { id: 'zcode', label: 'ZCode', found: (c) => existsSync(join(c.home, '.zcode')), file: (c) => join(c.home, '.zcode', 'cli', 'config.json'), key: ['mcp', 'servers'], entry: typed },
+  { id: 'claude-desktop', label: 'Claude Desktop', found: (c) => existsSync(join(appData(c), 'Claude')), file: (c) => join(appData(c), 'Claude', 'claude_desktop_config.json'), key: ['mcpServers'], entry: plain },
+  { id: 'cursor', label: 'Cursor', found: (c) => existsSync(join(c.home, '.cursor')), file: (c) => join(c.home, '.cursor', 'mcp.json'), key: ['mcpServers'], entry: plain },
+  { id: 'windsurf', label: 'Windsurf', found: (c) => existsSync(join(c.home, '.codeium', 'windsurf')), file: (c) => join(c.home, '.codeium', 'windsurf', 'mcp_config.json'), key: ['mcpServers'], entry: plain },
+  { id: 'vscode', label: 'VS Code', found: (c) => existsSync(vscodeUser(c)), file: (c) => join(vscodeUser(c), 'mcp.json'), key: ['servers'], entry: typed },
+  {
+    id: 'cline',
+    label: 'Cline',
+    found: (c) => existsSync(join(vscodeUser(c), 'globalStorage', 'saoudrizwan.claude-dev')),
+    file: (c) => join(vscodeUser(c), 'globalStorage', 'saoudrizwan.claude-dev', 'settings', 'cline_mcp_settings.json'),
+    key: ['mcpServers'],
+    entry: (command) => ({ ...plain(command), disabled: false }),
+  },
+  { id: 'gemini', label: 'Gemini CLI', found: (c) => existsSync(join(c.home, '.gemini')) || onPath(c, 'gemini'), file: (c) => join(c.home, '.gemini', 'settings.json'), key: ['mcpServers'], entry: plain },
+];
+const dig = (conf: Record<string, unknown> | null, key: string[]): unknown => key.reduce<unknown>((at, k) => (at as Record<string, unknown> | undefined)?.[k], conf ?? undefined);
+
+/** Writes `text` beside `file` first and moves it over, a copy of the old file left as .bak. */
+function replaceFile(file: string, text: string): void {
+  mkdirSync(dirname(file), { recursive: true });
+  if (existsSync(file)) copyFileSync(file, `${file}.bak`);
+  const tmp = `${file}.${randomBytes(4).toString('hex')}`;
+  writeFileSync(tmp, text);
+  renameSync(tmp, file);
+}
+
+/** A client's JSON file with `change` applied to its servers; the rest of the file stays. */
+function editJson(file: string, key: string[], change: (servers: Record<string, unknown>) => void): void {
+  const conf = existsSync(file) ? readJson(file) : {};
+  // Never over a file that could not be read (comments too): what it holds would be lost.
+  if (!conf) throw new Error(`Could not read ${file}: fix it or add MCatzP by hand`);
+  let at: Record<string, unknown> = conf;
+  for (const k of key) {
+    if (!at[k] || typeof at[k] !== 'object') at[k] = {};
+    at = at[k] as Record<string, unknown>;
+  }
+  change(at);
+  replaceFile(file, `${JSON.stringify(conf, null, 2)}\n`);
+}
+
+/** Codex keeps TOML: one [mcp_servers.<name>] table per server. Only that table, with its subtables, is touched. */
+const codexTable = (text: string): { name: string; start: number; end: number; command: string } | null => {
+  const head = /^[ \t]*\[mcp_servers\.("?)([^\]."]+)\1\][ \t]*\r?$/gim;
+  for (let m = head.exec(text); m; m = head.exec(text)) {
+    if (m[2].toLowerCase() !== 'mcatzp') continue;
+    const name = m[2] as string;
+    const rest = text.slice(m.index + m[0].length);
+    const next = [...rest.matchAll(/^[ \t]*\[([^\]\n]*)\]/gm)].find((n) => !n[1].replace(/"/g, '').toLowerCase().startsWith(`mcp_servers.${name.toLowerCase()}.`));
+    const end = next ? m.index + m[0].length + (next.index ?? 0) : text.length;
+    const body = text.slice(m.index, end);
+    const command = body.match(/^[ \t]*command[ \t]*=[ \t]*("(?:[^"\\]|\\.)*"|'[^']*')/m)?.[1] ?? '""';
+    let value = '';
+    try {
+      value = command.startsWith("'") ? command.slice(1, -1) : (JSON.parse(command) as string);
+    } catch {
+      /* written some other way: treated as another copy */
+    }
+    return { name, start: m.index, end, command: value };
+  }
+  return null;
+};
+const readText = (file: string) => {
+  try {
+    return readFileSync(file, 'utf8');
+  } catch {
+    return '';
+  }
+};
 
 export async function targets(o: SetupOptions): Promise<McatzpTarget[]> {
   const c = ctx(o);
   const { path } = await findInstalled(o);
-  const row = (id: McatzpTargetId, label: string, found: boolean, servers: unknown): McatzpTarget => {
+  const row = (id: McatzpTargetId, label: string, found: boolean, command: string | null): McatzpTarget => ({ id, label, found, command, current: command !== null && !!path && command === path });
+  const commandOf = (servers: unknown) => {
     const entry = entryOf(servers);
-    const command = entry ? (entry[1].command ?? '') : null;
-    return { id, label, found, command, current: command !== null && !!path && command === path };
+    return entry ? (entry[1].command ?? '') : null;
   };
   return [
-    row('claude-code', 'Claude Code', hasClaudeCli(c), readJson(claudeFile(c))?.mcpServers),
-    row('zcode', 'ZCode', existsSync(zcodeDir(c)), (readJson(zcodeFile(c))?.mcp as { servers?: unknown } | undefined)?.servers),
+    row('claude-code', 'Claude Code', onPath(c, 'claude'), commandOf(readJson(claudeFile(c))?.mcpServers)),
+    ...JSON_CLIENTS.map((j) => row(j.id, j.label, j.found(c), commandOf(dig(readJson(j.file(c)), j.key)))),
+    row('codex', 'Codex CLI', existsSync(join(c.home, '.codex')) || onPath(c, 'codex'), codexTable(readText(codexFile(c)))?.command ?? null),
   ];
-}
-
-/** ZCode's file with `change` applied to its servers: a copy of the old file beside it, written in one step. */
-function editZcode(c: Ctx, change: (servers: Record<string, unknown>) => void): void {
-  const file = zcodeFile(c);
-  const exists = existsSync(file);
-  const conf = exists ? readJson(file) : {};
-  // Never over a file that could not be read: what it holds would be lost.
-  if (!conf) throw new Error(`Could not read ${file}: fix it or remove it, then try again`);
-  const mcp = (conf.mcp ?? {}) as { servers?: Record<string, unknown> };
-  const servers = mcp.servers ?? {};
-  change(servers);
-  conf.mcp = { ...mcp, servers };
-  mkdirSync(dirname(file), { recursive: true });
-  if (exists) copyFileSync(file, `${file}.bak`);
-  const tmp = `${file}.${randomBytes(4).toString('hex')}`;
-  writeFileSync(tmp, `${JSON.stringify(conf, null, 2)}\n`);
-  renameSync(tmp, file);
 }
 
 /** Adds the entry, or points an existing one at the copy in use. The path is always the one found here. */
@@ -283,11 +350,19 @@ export async function addToClient(o: SetupOptions, id: McatzpTargetId): Promise<
   const c = ctx(o);
   const { path } = await findInstalled(o);
   if (!path) throw new Error('Install MCatzP first');
-  if (id === 'zcode') {
-    editZcode(c, (servers) => {
-      const name = entryOf(servers)?.[0] ?? 'mcatzp';
-      servers[name] = { type: 'stdio', command: path, args: [], env: {} };
+  const json = JSON_CLIENTS.find((j) => j.id === id);
+  if (json) {
+    editJson(json.file(c), json.key, (servers) => {
+      servers[entryOf(servers)?.[0] ?? 'mcatzp'] = json.entry(path);
     });
+    return;
+  }
+  if (id === 'codex') {
+    const text = readText(codexFile(c));
+    const table = codexTable(text);
+    const block = `[mcp_servers.${table?.name ?? 'mcatzp'}]\ncommand = ${JSON.stringify(path)}\nargs = []\n`;
+    const next = table ? `${text.slice(0, table.start)}${block}\n${text.slice(table.end).replace(/^\s+/, '')}` : `${text}${text && !text.endsWith('\n') ? '\n' : ''}${text ? '\n' : ''}${block}`;
+    replaceFile(codexFile(c), next);
     return;
   }
   const name = entryOf(readJson(claudeFile(c))?.mcpServers)?.[0];
@@ -301,11 +376,18 @@ export async function addToClient(o: SetupOptions, id: McatzpTargetId): Promise<
 
 export async function removeFromClient(o: SetupOptions, id: McatzpTargetId): Promise<void> {
   const c = ctx(o);
-  if (id === 'zcode') {
-    editZcode(c, (servers) => {
+  const json = JSON_CLIENTS.find((j) => j.id === id);
+  if (json) {
+    editJson(json.file(c), json.key, (servers) => {
       const name = entryOf(servers)?.[0];
       if (name) delete servers[name];
     });
+    return;
+  }
+  if (id === 'codex') {
+    const text = readText(codexFile(c));
+    const table = codexTable(text);
+    if (table) replaceFile(codexFile(c), `${text.slice(0, table.start)}${text.slice(table.end).replace(/^\s+/, '')}`);
     return;
   }
   const name = entryOf(readJson(claudeFile(c))?.mcpServers)?.[0];

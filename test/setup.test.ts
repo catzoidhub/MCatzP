@@ -181,6 +181,67 @@ describe('Add to client', () => {
     expect(lines).toContain('[mcp][remove][--scope][user][MCATZP]');
     expect(lines).toContain(`[mcp][add][--scope][user][MCATZP][--][${bin}]`);
   });
+  const MAC = 'Library/Application Support';
+  test.each([
+    ['claude-desktop', `${MAC}/Claude`, `${MAC}/Claude/claude_desktop_config.json`, ['mcpServers']],
+    ['cursor', '.cursor', '.cursor/mcp.json', ['mcpServers']],
+    ['windsurf', '.codeium/windsurf', '.codeium/windsurf/mcp_config.json', ['mcpServers']],
+    ['vscode', `${MAC}/Code/User`, `${MAC}/Code/User/mcp.json`, ['servers']],
+    ['cline', `${MAC}/Code/User/globalStorage/saoudrizwan.claude-dev`, `${MAC}/Code/User/globalStorage/saoudrizwan.claude-dev/settings/cline_mcp_settings.json`, ['mcpServers']],
+    ['gemini', '.gemini', '.gemini/settings.json', ['mcpServers']],
+  ] as const)('%s: found, added beside what is there, removed', async (id, dir, file, key) => {
+    const { o, bin } = await ready();
+    const row = async () => (await targets(o)).find((t) => t.id === id)!;
+    expect((await row()).found).toBe(false);
+    mkdirSync(join(o.home, dir), { recursive: true });
+    expect(await row()).toMatchObject({ found: true, command: null, current: false });
+    const path = join(o.home, file);
+    mkdirSync(join(path, '..'), { recursive: true });
+    writeFileSync(path, JSON.stringify({ theme: 'x', [key[0]]: { other: { command: '/k' } } }));
+    await addToClient(o, id);
+    const conf = JSON.parse(readFileSync(path, 'utf8'));
+    expect(conf.theme).toBe('x');
+    expect(conf[key[0]].other.command).toBe('/k');
+    expect(conf[key[0]].mcatzp.command).toBe(bin);
+    expect((await row()).current).toBe(true);
+    await removeFromClient(o, id);
+    expect(Object.keys(JSON.parse(readFileSync(path, 'utf8'))[key[0]])).toEqual(['other']);
+  });
+  test('a file with comments is left alone', async () => {
+    const { o } = await ready();
+    const path = join(o.home, MAC, 'Code', 'User', 'mcp.json');
+    mkdirSync(join(path, '..'), { recursive: true });
+    writeFileSync(path, '// mine\n{"servers":{}}');
+    await expect(addToClient(o, 'vscode')).rejects.toThrow('Could not read');
+    expect(readFileSync(path, 'utf8')).toBe('// mine\n{"servers":{}}');
+  });
+  test('Codex: TOML, only its own table', async () => {
+    const { o, bin } = await ready();
+    const path = join(o.home, '.codex', 'config.toml');
+    mkdirSync(join(path, '..'), { recursive: true });
+    const before = 'model = "x"\n\n[mcp_servers.other]\ncommand = "/k"\n\n[profiles.a]\nb = 1\n';
+    writeFileSync(path, before);
+    expect((await targets(o)).find((t) => t.id === 'codex')).toMatchObject({ found: true, command: null });
+    await addToClient(o, 'codex');
+    let text = readFileSync(path, 'utf8');
+    expect(text).toContain(before.trim());
+    expect(text).toContain(`[mcp_servers.mcatzp]\ncommand = ${JSON.stringify(bin)}\nargs = []`);
+    expect((await targets(o)).find((t) => t.id === 'codex')?.current).toBe(true);
+    await removeFromClient(o, 'codex');
+    text = readFileSync(path, 'utf8');
+    expect(text).not.toContain('mcatzp');
+    expect(text).toContain('[mcp_servers.other]');
+    // An old entry in another case, with a subtable, in the middle: replaced, the next table kept.
+    writeFileSync(path, 'a = 1\n[mcp_servers.MCatzP]\ncommand = "/old"\nargs = ["x"]\n[mcp_servers.MCatzP.env]\nK = "v"\n\n[profiles.a]\nb = 1\n');
+    expect((await targets(o)).find((t) => t.id === 'codex')?.command).toBe('/old');
+    await addToClient(o, 'codex');
+    text = readFileSync(path, 'utf8');
+    expect(text).toContain(`[mcp_servers.MCatzP]\ncommand = ${JSON.stringify(bin)}`);
+    expect(text).not.toContain('/old');
+    expect(text).not.toContain('K = "v"');
+    expect(text).toContain('[profiles.a]\nb = 1');
+    expect(readFileSync(`${path}.bak`, 'utf8')).toContain('/old');
+  });
   test('Claude Code absent', async () => {
     expect((await targets(machine())).find((t) => t.id === 'claude-code')?.found).toBe(false);
   });
