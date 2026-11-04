@@ -9,14 +9,22 @@ import { type Cat, describeState, discover } from './discovery.js';
 import { ICON } from './icon.js';
 import { VERSION } from './version.js';
 
-/** How long tools/list waits for an app (pairing can take longer; the list then updates by itself). */
+/** How long anything waits for an app that has not answered yet. */
 const LIST_WAIT_MS = 5_000;
+/**
+ * The first tools/list waits this long for the user to answer the pairing dialog: not every client reloads its tools
+ * after list_changed (ZCode 0.17 does not), and a list without this app's tools would stay so for the whole session.
+ * Under the 30 s and 60 s clients commonly give a request; only the first list waits, so a dialog left open costs once.
+ */
+const PAIRING_WAIT_MS = 25_000;
 const WATCH_MS = 3_000;
 
 interface Link {
   conn: AppConnection;
   ready: Promise<unknown>;
   error?: string;
+  /** The first tools/list already waited for the pairing dialog. */
+  waited?: boolean;
 }
 
 export interface McatzpOptions {
@@ -25,6 +33,7 @@ export interface McatzpOptions {
 
 export function createMcatzpServer(opts: McatzpOptions = {}): { server: Server; close(): void } {
   const env = opts.env ?? process.env;
+  const pairingWait = Number(env.MCATZP_PAIRING_WAIT_MS) || PAIRING_WAIT_MS;
   const server = new Server(
     { name: 'mcatzp', title: 'MCatzP', version: VERSION, icons: [ICON] },
     {
@@ -69,7 +78,7 @@ export function createMcatzpServer(opts: McatzpOptions = {}): { server: Server; 
     return l;
   }
 
-  async function state(): Promise<{ cats: Cat[]; tools: Tool[]; notes: Map<string, string> }> {
+  async function state(listing = false): Promise<{ cats: Cat[]; tools: Tool[]; notes: Map<string, string> }> {
     const cats = await discover(env);
     const tools: Tool[] = [];
     const notes = new Map<string, string>();
@@ -85,9 +94,11 @@ export function createMcatzpServer(opts: McatzpOptions = {}): { server: Server; 
         .filter((c) => c.state === 'on')
         .map(async (cat) => {
           const l = link(cat);
-          const waited = await Promise.race([l.ready.then(() => true), sleep(LIST_WAIT_MS).then(() => false)]);
+          const wait = listing && !l.waited ? pairingWait : LIST_WAIT_MS;
+          if (listing) l.waited = true;
+          const waited = await Promise.race([l.ready.then(() => true), sleep(wait).then(() => false)]);
           if (!waited) {
-            notes.set(cat.id, `${cat.name} is waiting for the user to approve this client (pairing) in ${cat.name}.`);
+            notes.set(cat.id, `${cat.name} is waiting for the user to approve this client (pairing) in ${cat.name}. Once approved its tools appear; if this client does not show them, start a new session in it.`);
             return;
           }
           if (l.error || l.conn.closed || !l.conn.hello) {
@@ -107,7 +118,7 @@ export function createMcatzpServer(opts: McatzpOptions = {}): { server: Server; 
   }
 
   server.setRequestHandler(ListToolsRequestSchema, async () => {
-    const { tools } = await state();
+    const { tools } = await state(true);
     return { tools: [STATUS_TOOL, ...tools] };
   });
 
