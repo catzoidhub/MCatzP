@@ -305,10 +305,10 @@ function editJson(file: string, key: string[], change: (servers: Record<string, 
 const codexTable = (text: string): { name: string; start: number; end: number; command: string } | null => {
   const head = /^[ \t]*\[mcp_servers\.("?)([^\]."]+)\1\][ \t]*\r?$/gim;
   for (let m = head.exec(text); m; m = head.exec(text)) {
-    if (m[2].toLowerCase() !== 'mcatzp') continue;
-    const name = m[2] as string;
+    const name = m[2] ?? '';
+    if (name.toLowerCase() !== 'mcatzp') continue;
     const rest = text.slice(m.index + m[0].length);
-    const next = [...rest.matchAll(/^[ \t]*\[([^\]\n]*)\]/gm)].find((n) => !n[1].replace(/"/g, '').toLowerCase().startsWith(`mcp_servers.${name.toLowerCase()}.`));
+    const next = [...rest.matchAll(/^[ \t]*\[([^\]\n]*)\]/gm)].find((n) => !(n[1] ?? '').replace(/"/g, '').toLowerCase().startsWith(`mcp_servers.${name.toLowerCase()}.`));
     const end = next ? m.index + m[0].length + (next.index ?? 0) : text.length;
     const body = text.slice(m.index, end);
     const command = body.match(/^[ \t]*command[ \t]*=[ \t]*("(?:[^"\\]|\\.)*"|'[^']*')/m)?.[1] ?? '""';
