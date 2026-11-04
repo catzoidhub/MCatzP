@@ -140,7 +140,7 @@ export function createMcatzpServer(opts: McatzpOptions = {}): { server: Server; 
             };
       const result = await l.conn.call(name.slice(cat.id.length + 1), args, onProgress, extra.signal);
       return {
-        content: [{ type: 'text', text: result.text }],
+        content: [{ type: 'text', text: result.text }, ...(result.image ? [{ type: 'image' as const, data: result.image.data, mimeType: result.image.mimeType }] : [])],
         ...(result.data !== undefined && isRecord(result.data) ? { structuredContent: result.data } : {}),
       };
     } catch (e) {

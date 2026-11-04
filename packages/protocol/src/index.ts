@@ -88,6 +88,8 @@ export interface CallResult {
   text: string;
   /** Optional structured copy of the same result. */
   data?: unknown;
+  /** Optional picture for clients that can look at one (a screenshot), base64. */
+  image?: { mimeType: string; data: string };
 }
 
 export const Methods = {
