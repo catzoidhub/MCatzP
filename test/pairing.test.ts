@@ -1,10 +1,12 @@
 // A client that starts while the pairing dialog is open: its first tools/list must not settle for mcatzp_status,
 // because not every client reloads its tools after list_changed.
 import { afterEach, expect, test } from 'bun:test';
-import { mkdtemp, rm } from 'node:fs/promises';
+import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import net from 'node:net';
 import os from 'node:os';
 import path from 'node:path';
 import { startFakecat } from '@catzoid/mcatzp-fakecat';
+import { PROTOCOL_VERSION } from '@catzoid/mcatzp-protocol';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
 
@@ -43,3 +45,42 @@ test('a dialog left open costs one wait, then the status says what to do', async
   const r = (await c.callTool({ name: 'mcatzp_status', arguments: {} })) as { content: { text: string }[] };
   expect(r.content[0]?.text).toContain('start a new session');
 }, 20_000);
+
+test('a later list answers at once while the dialog is still open', async () => {
+  const c = await connect(60_000, { MCATZP_PAIRING_WAIT_MS: '500' });
+  await names(c);
+  const t0 = Date.now();
+  expect(await names(c)).toEqual(['mcatzp_status']);
+  expect(Date.now() - t0).toBeLessThan(1_000);
+}, 20_000);
+
+test('one Allow pairs a client once, however many of its sessions are waiting', async () => {
+  const dir = await mkdtemp(path.join(os.tmpdir(), 'mcatzp-pairing-'));
+  let allow = (_: boolean) => {};
+  const asked = new Promise<boolean>((r) => (allow = r));
+  let questions = 0;
+  const paired: string[] = [];
+  const cat = await startFakecat(dir, {
+    pair: () => (questions++, asked),
+    confirm: async () => 'once',
+    isPaired: (n) => paired.includes(n),
+    onPaired: (n) => paired.push(n),
+  });
+  clean.push(() => cat.stop(), () => rm(dir, { recursive: true, force: true }));
+  const entry = cat.host.entry();
+  const token = await readFile(entry.tokenFile!, 'utf8');
+  const hello = (): Promise<string> =>
+    new Promise((resolve) => {
+      const s = net.connect(entry.channel!, () =>
+        s.write(`${JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'hello', params: { protocol: PROTOCOL_VERSION, token, client: { name: 'many' }, server: { name: 'mcatzp', version: '0' } } })}\n`),
+      );
+      s.setEncoding('utf8');
+      s.once('data', (d: string) => (s.destroy(), resolve(d)));
+    });
+  const sessions = [hello(), hello(), hello()];
+  await new Promise((r) => setTimeout(r, 100));
+  allow(true);
+  for (const r of await Promise.all(sessions)) expect(JSON.parse(r).result.app.id).toBe('fakecat');
+  expect(questions).toBe(1);
+  expect(paired).toEqual(['many']);
+});

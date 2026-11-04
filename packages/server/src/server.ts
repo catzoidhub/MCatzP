@@ -94,7 +94,8 @@ export function createMcatzpServer(opts: McatzpOptions = {}): { server: Server; 
         .filter((c) => c.state === 'on')
         .map(async (cat) => {
           const l = link(cat);
-          const wait = listing && !l.waited ? pairingWait : LIST_WAIT_MS;
+          // Only the first list waits for the dialog; a later one answers at once with what is approved so far.
+          const wait = !listing ? LIST_WAIT_MS : l.waited ? 0 : pairingWait;
           if (listing) l.waited = true;
           const waited = await Promise.race([l.ready.then(() => true), sleep(wait).then(() => false)]);
           if (!waited) {

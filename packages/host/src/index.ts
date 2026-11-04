@@ -259,14 +259,20 @@ export class McatzpHost {
     if (!this.opts.isPaired?.(name)) {
       let pending = this.pairing.get(name);
       if (!pending) {
-        pending = this.opts.pair({ name, version: p.client.version }).finally(() => this.pairing.delete(name));
+        // Once per answer: several sessions of one client connect at once and share this question.
+        pending = this.opts
+          .pair({ name, version: p.client.version })
+          .then((ok) => {
+            if (ok) this.opts.onPaired?.(name);
+            return ok;
+          })
+          .finally(() => this.pairing.delete(name));
         this.pairing.set(name, pending);
       }
       if (!(await pending)) {
         this.write({ client: name, method: Methods.hello, outcome: 'declined', reason: 'pairing denied' });
         throw new ProtocolError(ErrorCodes.pairingDenied, `${this.opts.app.name}: the user did not approve ${name}.`);
       }
-      this.opts.onPaired?.(name);
     }
     conn.client = name;
     this.write({ client: name, method: Methods.hello, outcome: 'ok' });
