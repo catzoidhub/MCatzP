@@ -47,8 +47,8 @@ Queries through `run_read_query` must only read, and are checked statement by st
 they also run on a session that is read-only on the server. Something that writes is refused, and named in the answer.
 
 Values under a column, field or key whose name looks secret (`password`, `api_token`, `secret` …) come back as `•••`, and
-other secrets in text are masked as they are for [AI in DBCatz](/docs/dbcatz/ai). This goes by the name, so it can miss a
-secret kept under an ordinary name. Connection passwords are never read at all.
+other secrets in text are masked as they are for [AI in DBCatz](/docs/dbcatz/ai). An alias or a function around such a column is masked too. This
+goes by the name, so it can miss a secret kept under an ordinary name. Connection passwords are never read at all.
 
 ## What it asks first
 
