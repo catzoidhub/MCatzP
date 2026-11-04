@@ -1,6 +1,6 @@
 {
   "name": "mcatzp",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "MCatzP \u2014 the MCP with the cats inside: one MCP server for every Catzoid app (DevCatz, DBCatz, DialCatz, DoCatz).",
   "license": "Apache-2.0",
   "homepage": "https://catzoid.com/mcatzp",

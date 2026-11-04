@@ -16,7 +16,7 @@
     },
     "packages/fakecat": {
       "name": "@catzoid/mcatzp-fakecat",
-      "version": "1.0.0",
+      "version": "1.0.1",
       "bin": {
         "fakecat": "dist/index.js",
       },
@@ -27,7 +27,7 @@
     },
     "packages/host": {
       "name": "@catzoid/mcatzp-host",
-      "version": "1.0.0",
+      "version": "1.0.1",
       "dependencies": {
         "@catzoid/mcatzp-protocol": "workspace:*",
         "ajv": "^8.17.1",
@@ -35,11 +35,11 @@
     },
     "packages/protocol": {
       "name": "@catzoid/mcatzp-protocol",
-      "version": "1.0.0",
+      "version": "1.0.1",
     },
     "packages/server": {
       "name": "mcatzp",
-      "version": "1.0.0",
+      "version": "1.0.1",
       "bin": {
         "mcatzp": "dist/index.js",
       },

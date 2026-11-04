@@ -1,6 +1,6 @@
 {
   "name": "@catzoid/mcatzp-host",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "What a Catzoid app embeds to be reachable by MCatzP: the local channel, token, pairing, tiers, confirmations and activity log.",
   "license": "Apache-2.0",
   "type": "module",
