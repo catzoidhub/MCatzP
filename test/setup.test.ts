@@ -196,6 +196,7 @@ describe('Add to client', () => {
     ['qwen', '.qwen', '.qwen/settings.json', ['mcpServers']],
     ['lmstudio', '.lmstudio', '.lmstudio/mcp.json', ['mcpServers']],
     ['roo', `${MAC}/Code/User/globalStorage/rooveterinaryinc.roo-cline`, `${MAC}/Code/User/globalStorage/rooveterinaryinc.roo-cline/settings/mcp_settings.json`, ['mcpServers']],
+    ['warp', '.warp', '.warp/.mcp.json', ['mcpServers']],
     ['amp', '.config/amp', '.config/amp/settings.json', ['amp.mcpServers']],
   ] as const)('%s: found, added beside what is there, removed', async (id, dir, file, key) => {
     const { o, bin } = await ready();

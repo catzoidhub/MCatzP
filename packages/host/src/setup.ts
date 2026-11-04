@@ -40,7 +40,7 @@ export interface McatzpInstallProgress {
   total: number;
 }
 
-export const MCATZP_TARGETS = ['claude-code', 'zcode', 'claude-desktop', 'cursor', 'windsurf', 'vscode', 'cline', 'gemini', 'codex', 'opencode', 'copilot', 'kiro', 'antigravity', 'qwen', 'lmstudio', 'roo', 'amp'] as const;
+export const MCATZP_TARGETS = ['claude-code', 'zcode', 'claude-desktop', 'cursor', 'windsurf', 'vscode', 'cline', 'gemini', 'codex', 'opencode', 'copilot', 'kiro', 'antigravity', 'qwen', 'lmstudio', 'roo', 'amp', 'warp'] as const;
 export type McatzpTargetId = (typeof MCATZP_TARGETS)[number];
 
 export interface McatzpTarget {
@@ -321,6 +321,7 @@ const JSON_CLIENTS: JsonClient[] = [
     key: ['amp.mcpServers'],
     entry: plain,
   },
+  { id: 'warp', label: 'Warp', found: (c) => existsSync(join(c.home, '.warp')) || (c.mac && existsSync('/Applications/Warp.app')), file: (c) => join(c.home, '.warp', '.mcp.json'), key: ['mcpServers'], entry: plain },
   { id: 'gemini', label: 'Gemini CLI', found: (c) => existsSync(join(c.home, '.gemini')) || onPath(c, 'gemini'), file: (c) => join(c.home, '.gemini', 'settings.json'), key: ['mcpServers'], entry: plain },
 ];
 const dig = (conf: Record<string, unknown> | null, key: string[]): unknown => key.reduce<unknown>((at, k) => (at as Record<string, unknown> | undefined)?.[k], conf ?? undefined);
