@@ -1,7 +1,7 @@
 name: CI
 on:
   push:
-    branches: [main]
+    branches: [main, 'feature/**']
   pull_request:
 jobs:
   test:
@@ -10,7 +10,7 @@ jobs:
         os: [macos-latest, windows-latest]
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: 1.3.3
@@ -18,3 +18,12 @@ jobs:
       - run: bun run typecheck
       - run: bun run build
       - run: bun test
+      # The release binary for this runner (the same Bun target scripts/release.mjs uses), end to end: on Windows this
+      # is the bun --compile binary over a real named pipe on real x64.
+      - name: End to end on the compiled binary
+        shell: bash
+        run: |
+          if [ "$RUNNER_OS" = "Windows" ]; then target=bun-windows-x64-baseline; bin=dist/ci/mcatzp.exe; else target=bun-darwin-arm64; bin=dist/ci/mcatzp; fi
+          bun build packages/server/src/index.ts --compile --target=$target --outfile $bin
+          test "$($bin --version)" = "$(node -p "require('./packages/server/package.json').version")"
+          MCATZP_E2E_CMD=$bin bun test test/e2e.test.ts

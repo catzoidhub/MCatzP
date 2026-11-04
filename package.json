@@ -10,7 +10,8 @@
     "test": "bun test",
     "build": "bun run --filter '@catzoid/mcatzp-protocol' build && bun run --filter '@catzoid/mcatzp-host' build && bun run --filter mcatzp build && bun run --filter '@catzoid/mcatzp-fakecat' build",
     "fakecat": "bun packages/fakecat/src/index.ts",
-    "dev": "bun packages/server/src/index.ts"
+    "dev": "bun packages/server/src/index.ts",
+    "release": "bun scripts/release.mjs"
   },
   "devDependencies": {
     "@catzoid/mcatzp-fakecat": "workspace:*",
