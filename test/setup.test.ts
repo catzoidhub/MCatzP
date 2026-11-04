@@ -1,0 +1,187 @@
+import { afterAll, describe, expect, test } from 'bun:test';
+import { execFileSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { delimiter, join } from 'node:path';
+import { addToClient, install, installPath, removeFromClient, setupState, targets } from '@catzoid/mcatzp-host';
+
+// macOS: `ditto`, a shell script as the "program".
+const root = mkdtempSync(join(tmpdir(), 'mcatzp-setup-'));
+afterAll(() => {
+  server.stop(true);
+  rmSync(root, { recursive: true, force: true });
+});
+
+function zipOf(name: string, files: Record<string, string>): string {
+  const dir = join(root, 'zips', name);
+  mkdirSync(dir, { recursive: true });
+  for (const [f, text] of Object.entries(files)) {
+    writeFileSync(join(dir, f), text);
+    chmodSync(join(dir, f), 0o755);
+  }
+  const zip = join(root, 'zips', `${name}.zip`);
+  execFileSync('/usr/bin/zip', ['-qj', zip, ...Object.keys(files).map((f) => join(dir, f))]);
+  return zip;
+}
+const program = (v: string) => `#!/bin/sh\necho ${v}\n`;
+const ZIPS: Record<string, { version: string; zip: string; sha?: string }> = {
+  good: { version: '1.0.0', zip: zipOf('good', { mcatzp: program('1.0.0') }) },
+  newer: { version: '1.1.0', zip: zipOf('newer', { mcatzp: program('1.1.0') }) },
+  badsum: { version: '1.0.0', zip: zipOf('badsum', { mcatzp: program('1.0.0') }), sha: 'a'.repeat(64) },
+  broken: { version: '1.0.0', zip: zipOf('broken', { mcatzp: '#!/bin/sh\nexit 1\n' }) },
+  wrong: { version: '2.0.0', zip: zipOf('wrong', { mcatzp: program('1.0.0') }) },
+  empty: { version: '1.0.0', zip: zipOf('empty', { other: 'x' }) },
+};
+let mode: string | null = null;
+const server = Bun.serve({
+  port: 0,
+  fetch(req) {
+    const u = new URL(req.url);
+    const z = mode ? ZIPS[mode] : null;
+    if (!z) return new Response('no', { status: 404 });
+    const bytes = readFileSync(z.zip);
+    if (u.pathname === '/api/mcatzp/latest') return Response.json({ version: z.version, sha256: z.sha ?? createHash('sha256').update(bytes).digest('hex') });
+    return new Response(bytes);
+  },
+});
+
+let n = 0;
+function machine(extra: { path?: string } = {}) {
+  const home = join(root, `home${n++}`);
+  mkdirSync(home, { recursive: true });
+  return { site: `http://127.0.0.1:${server.port}`, home, platform: 'darwin' as const, arch: 'arm64', env: { PATH: extra.path ?? '/usr/bin:/bin' } };
+}
+const never = new AbortController().signal;
+const noop = () => {};
+const left = (o: ReturnType<typeof machine>) => readdirSync(join(o.home, '.catzoid', 'bin')).filter((f) => f.startsWith('.'));
+
+describe('the program', () => {
+  test('no build for this computer', async () => {
+    mode = null;
+    const o = machine();
+    expect(await setupState(o)).toMatchObject({ path: null, noBuild: true, checked: true });
+    expect(install(o, noop, never)).rejects.toThrow('no build');
+    const linux = await setupState({ ...o, platform: 'linux' });
+    expect(linux.noBuild).toBe(true);
+  });
+  test('without asking the site', async () => {
+    mode = null;
+    expect(await setupState(machine(), false)).toMatchObject({ checked: false, latest: null, noBuild: false });
+  });
+  test('installs at the shared path, then updates', async () => {
+    const o = machine();
+    mode = 'good';
+    await install(o, noop, never);
+    const path = join(o.home, '.catzoid', 'bin', 'mcatzp');
+    expect(installPath(o)).toBe(path);
+    expect(statSync(path).mode & 0o111).not.toBe(0);
+    expect(await setupState(o)).toMatchObject({ path, version: '1.0.0', source: 'catzoid', latest: '1.0.0' });
+    mode = 'newer';
+    expect(await setupState(o)).toMatchObject({ version: '1.0.0', latest: '1.1.0' });
+    await install(o, noop, never);
+    expect((await setupState(o)).version).toBe('1.1.0');
+    expect(left(o)).toEqual([]);
+  });
+  test.each([
+    ['badsum', 'Checksum mismatch'],
+    ['broken', 'does not start'],
+    ['wrong', 'not the 2.0.0'],
+    ['empty', 'no MCatzP program'],
+  ])('%s is refused and leaves nothing', async (m, message) => {
+    const o = machine();
+    mode = m;
+    await expect(install(o, noop, never)).rejects.toThrow(message);
+    expect(existsSync(installPath(o))).toBe(false);
+    expect(left(o)).toEqual([]);
+  });
+  test('one install at a time, across apps', async () => {
+    const o = machine();
+    mode = 'good';
+    mkdirSync(join(o.home, '.catzoid', 'bin', '.install.lock'), { recursive: true });
+    await expect(install(o, noop, never)).rejects.toThrow('Another Catzoid app');
+    expect(existsSync(installPath(o))).toBe(false);
+  });
+  test('cancel stops it', async () => {
+    const o = machine();
+    mode = 'good';
+    const a = new AbortController();
+    a.abort();
+    await expect(install(o, noop, a.signal)).rejects.toThrow();
+    expect(existsSync(installPath(o))).toBe(false);
+    expect(left(o)).toEqual([]);
+  });
+  test('a copy on the PATH is used, never a second one', async () => {
+    const bin = join(root, 'pathbin');
+    mkdirSync(bin, { recursive: true });
+    writeFileSync(join(bin, 'mcatzp'), program('0.9.0'));
+    chmodSync(join(bin, 'mcatzp'), 0o755);
+    const o = machine({ path: `${bin}${delimiter}/usr/bin:/bin` });
+    mode = 'good';
+    expect(await setupState(o)).toMatchObject({ path: join(bin, 'mcatzp'), version: '0.9.0', source: 'other' });
+  });
+  test('Windows path', () => {
+    expect(installPath({ site: '', platform: 'win32', home: 'H', env: { LOCALAPPDATA: 'L' } })).toBe(join('L', 'Catzoid', 'bin', 'mcatzp.exe'));
+  });
+});
+
+describe('Add to client', () => {
+  async function ready(extra: { path?: string } = {}) {
+    const o = machine(extra);
+    mode = 'good';
+    await install(o, noop, never);
+    return { o, bin: installPath(o) };
+  }
+  test('needs the program', async () => {
+    await expect(addToClient(machine(), 'zcode')).rejects.toThrow('Install MCatzP first');
+  });
+  test('ZCode: an existing entry in any case is reused, the rest kept, the old file backed up', async () => {
+    const { o, bin } = await ready();
+    const file = join(o.home, '.zcode', 'cli', 'config.json');
+    mkdirSync(join(o.home, '.zcode', 'cli'), { recursive: true });
+    writeFileSync(file, JSON.stringify({ other: 1, mcp: { timeout: 5, servers: { MCatzP: { command: '/x/bun', args: ['a'] }, keep: { command: '/k' } } } }));
+    expect((await targets(o)).find((t) => t.id === 'zcode')).toMatchObject({ found: true, command: '/x/bun', current: false });
+    await addToClient(o, 'zcode');
+    const conf = JSON.parse(readFileSync(file, 'utf8'));
+    expect(conf.other).toBe(1);
+    expect(conf.mcp.timeout).toBe(5);
+    expect(conf.mcp.servers).toEqual({ MCatzP: { type: 'stdio', command: bin, args: [], env: {} }, keep: { command: '/k' } });
+    expect(JSON.parse(readFileSync(`${file}.bak`, 'utf8')).mcp.servers.MCatzP.command).toBe('/x/bun');
+    expect((await targets(o)).find((t) => t.id === 'zcode')?.current).toBe(true);
+    await removeFromClient(o, 'zcode');
+    expect(Object.keys(JSON.parse(readFileSync(file, 'utf8')).mcp.servers)).toEqual(['keep']);
+  });
+  test('ZCode: an unreadable file is left alone', async () => {
+    const { o } = await ready();
+    const file = join(o.home, '.zcode', 'cli', 'config.json');
+    mkdirSync(join(o.home, '.zcode', 'cli'), { recursive: true });
+    writeFileSync(file, '{broken');
+    await expect(addToClient(o, 'zcode')).rejects.toThrow('Could not read');
+    expect(readFileSync(file, 'utf8')).toBe('{broken');
+  });
+  test('ZCode: no file yet', async () => {
+    const { o, bin } = await ready();
+    mkdirSync(join(o.home, '.zcode'), { recursive: true });
+    await addToClient(o, 'zcode');
+    expect(JSON.parse(readFileSync(join(o.home, '.zcode', 'cli', 'config.json'), 'utf8')).mcp.servers.mcatzp.command).toBe(bin);
+  });
+  test('Claude Code: through its own command, with a path that has spaces', async () => {
+    const cli = join(root, 'fake claude');
+    mkdirSync(cli, { recursive: true });
+    const log = join(root, 'claude.log');
+    writeFileSync(join(cli, 'claude'), `#!/bin/sh\nfor a in "$@"; do printf '[%s]' "$a" >> "${log}"; done\necho >> "${log}"\n`);
+    chmodSync(join(cli, 'claude'), 0o755);
+    const { o, bin } = await ready({ path: `${cli}${delimiter}/usr/bin:/bin` });
+    expect((await targets(o)).find((t) => t.id === 'claude-code')?.found).toBe(true);
+    await addToClient(o, 'claude-code');
+    expect(readFileSync(log, 'utf8')).toContain(`[mcp][add][--scope][user][mcatzp][--][${bin}]`);
+    writeFileSync(join(o.home, '.claude.json'), JSON.stringify({ mcpServers: { MCATZP: { command: '/old' } } }));
+    await addToClient(o, 'claude-code');
+    const lines = readFileSync(log, 'utf8');
+    expect(lines).toContain('[mcp][remove][--scope][user][MCATZP]');
+    expect(lines).toContain(`[mcp][add][--scope][user][MCATZP][--][${bin}]`);
+  });
+  test('Claude Code absent', async () => {
+    expect((await targets(machine())).find((t) => t.id === 'claude-code')?.found).toBe(false);
+  });
+});

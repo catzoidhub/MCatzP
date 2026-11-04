@@ -382,3 +382,4 @@ export async function writeBridgeEntry(bridgeFile: string, entry: BridgeEntry): 
 }
 
 export type { ActionInfo, AppInfo, BridgeEntry, CallResult, Platform } from '@catzoid/mcatzp-protocol';
+export * from './setup.js';
