@@ -6,7 +6,8 @@ import { tmpdir } from 'node:os';
 import { delimiter, join } from 'node:path';
 import { addToClient, approvalsAcrossApps, install, installPath, removeFromClient, setupState, targets } from '@catzoid/mcatzp-host';
 
-// macOS: `ditto`, a shell script as the "program".
+// Installing is tried on macOS only here: `zip`, `ditto` and a shell script as the "program". CI runs on Windows too.
+const mac = process.platform === 'darwin';
 const root = mkdtempSync(join(tmpdir(), 'mcatzp-setup-'));
 afterAll(() => {
   server.stop(true);
@@ -25,7 +26,7 @@ function zipOf(name: string, files: Record<string, string>): string {
   return zip;
 }
 const program = (v: string) => `#!/bin/sh\necho ${v}\n`;
-const ZIPS: Record<string, { version: string; zip: string; sha?: string }> = {
+const ZIPS: Record<string, { version: string; zip: string; sha?: string }> = !mac ? {} : {
   good: { version: '1.0.0', zip: zipOf('good', { mcatzp: program('1.0.0') }) },
   newer: { version: '1.1.0', zip: zipOf('newer', { mcatzp: program('1.1.0') }) },
   badsum: { version: '1.0.0', zip: zipOf('badsum', { mcatzp: program('1.0.0') }), sha: 'a'.repeat(64) },
@@ -56,7 +57,7 @@ const never = new AbortController().signal;
 const noop = () => {};
 const left = (o: ReturnType<typeof machine>) => readdirSync(join(o.home, '.catzoid', 'bin')).filter((f) => f.startsWith('.'));
 
-describe('the program', () => {
+describe.skipIf(!mac)('the program', () => {
   test('no build for this computer', async () => {
     mode = null;
     const o = machine();
@@ -120,12 +121,9 @@ describe('the program', () => {
     mode = 'good';
     expect(await setupState(o)).toMatchObject({ path: join(bin, 'mcatzp'), version: '0.9.0', source: 'other' });
   });
-  test('Windows path', () => {
-    expect(installPath({ site: '', platform: 'win32', home: 'H', env: { LOCALAPPDATA: 'L' } })).toBe(join('L', 'Catzoid', 'bin', 'mcatzp.exe'));
-  });
 });
 
-describe('Add to client', () => {
+describe.skipIf(!mac)('Add to client', () => {
   async function ready(extra: { path?: string } = {}) {
     const o = machine(extra);
     mode = 'good';
@@ -260,6 +258,10 @@ describe('Add to client', () => {
   test('Claude Code absent', async () => {
     expect((await targets(machine())).find((t) => t.id === 'claude-code')?.found).toBe(false);
   });
+});
+
+test('Windows path', () => {
+  expect(installPath({ site: '', platform: 'win32', home: 'H', env: { LOCALAPPDATA: 'L' } })).toBe(join('L', 'Catzoid', 'bin', 'mcatzp.exe'));
 });
 
 describe('where a client is approved', () => {
