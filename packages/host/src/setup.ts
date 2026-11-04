@@ -40,7 +40,7 @@ export interface McatzpInstallProgress {
   total: number;
 }
 
-export const MCATZP_TARGETS = ['claude-code', 'zcode', 'claude-desktop', 'cursor', 'windsurf', 'vscode', 'cline', 'gemini', 'codex'] as const;
+export const MCATZP_TARGETS = ['claude-code', 'zcode', 'claude-desktop', 'cursor', 'windsurf', 'vscode', 'cline', 'gemini', 'codex', 'opencode'] as const;
 export type McatzpTargetId = (typeof MCATZP_TARGETS)[number];
 
 export interface McatzpTarget {
@@ -52,6 +52,8 @@ export interface McatzpTarget {
   command: string | null;
   /** The entry runs the copy in use. */
   current: boolean;
+  /** The account signed in to it, when the assistant keeps that on this computer. */
+  account?: string;
 }
 
 const STALL_MS = 60_000;
@@ -225,9 +227,9 @@ export async function install(o: SetupOptions, progress: (p: McatzpInstallProgre
 }
 
 /** An entry named mcatzp in any case is the same entry, so a client never lists two. */
-const entryOf = (servers: unknown): [string, { command?: string }] | null => {
+const entryOf = (servers: unknown): [string, { command?: string | string[] }] | null => {
   if (!servers || typeof servers !== 'object') return null;
-  return Object.entries(servers as Record<string, { command?: string }>).find(([k]) => k.toLowerCase() === 'mcatzp') ?? null;
+  return Object.entries(servers as Record<string, { command?: string | string[] }>).find(([k]) => k.toLowerCase() === 'mcatzp') ?? null;
 };
 const readJson = (file: string): Record<string, unknown> | null => {
   try {
@@ -273,6 +275,14 @@ const JSON_CLIENTS: JsonClient[] = [
     file: (c) => join(vscodeUser(c), 'globalStorage', 'saoudrizwan.claude-dev', 'settings', 'cline_mcp_settings.json'),
     key: ['mcpServers'],
     entry: (command) => ({ ...plain(command), disabled: false }),
+  },
+  {
+    id: 'opencode',
+    label: 'OpenCode',
+    found: (c) => existsSync(join(c.home, '.config', 'opencode')) || onPath(c, 'opencode'),
+    file: (c) => join(c.home, '.config', 'opencode', 'opencode.json'),
+    key: ['mcp'],
+    entry: (command) => ({ type: 'local', command: [command], enabled: true }),
   },
   { id: 'gemini', label: 'Gemini CLI', found: (c) => existsSync(join(c.home, '.gemini')) || onPath(c, 'gemini'), file: (c) => join(c.home, '.gemini', 'settings.json'), key: ['mcpServers'], entry: plain },
 ];
@@ -336,10 +346,15 @@ export async function targets(o: SetupOptions): Promise<McatzpTarget[]> {
   const row = (id: McatzpTargetId, label: string, found: boolean, command: string | null): McatzpTarget => ({ id, label, found, command, current: command !== null && !!path && command === path });
   const commandOf = (servers: unknown) => {
     const entry = entryOf(servers);
-    return entry ? (entry[1].command ?? '') : null;
+    if (!entry) return null;
+    // OpenCode keeps the command and its arguments in one list.
+    const command = entry[1].command ?? '';
+    return Array.isArray(command) ? command.join(' ') : command;
   };
+  const claude = readJson(claudeFile(c));
+  const account = (claude?.oauthAccount as { emailAddress?: unknown } | undefined)?.emailAddress;
   return [
-    row('claude-code', 'Claude Code', onPath(c, 'claude'), commandOf(readJson(claudeFile(c))?.mcpServers)),
+    { ...row('claude-code', 'Claude Code', onPath(c, 'claude'), commandOf(claude?.mcpServers)), ...(typeof account === 'string' ? { account } : {}) },
     ...JSON_CLIENTS.map((j) => row(j.id, j.label, j.found(c), commandOf(dig(readJson(j.file(c)), j.key)))),
     row('codex', 'Codex CLI', existsSync(join(c.home, '.codex')) || onPath(c, 'codex'), codexTable(readText(codexFile(c)))?.command ?? null),
   ];

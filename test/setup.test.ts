@@ -189,6 +189,7 @@ describe('Add to client', () => {
     ['vscode', `${MAC}/Code/User`, `${MAC}/Code/User/mcp.json`, ['servers']],
     ['cline', `${MAC}/Code/User/globalStorage/saoudrizwan.claude-dev`, `${MAC}/Code/User/globalStorage/saoudrizwan.claude-dev/settings/cline_mcp_settings.json`, ['mcpServers']],
     ['gemini', '.gemini', '.gemini/settings.json', ['mcpServers']],
+    ['opencode', '.config/opencode', '.config/opencode/opencode.json', ['mcp']],
   ] as const)('%s: found, added beside what is there, removed', async (id, dir, file, key) => {
     const { o, bin } = await ready();
     const row = async () => (await targets(o)).find((t) => t.id === id)!;
@@ -202,7 +203,7 @@ describe('Add to client', () => {
     const conf = JSON.parse(readFileSync(path, 'utf8'));
     expect(conf.theme).toBe('x');
     expect(conf[key[0]].other.command).toBe('/k');
-    expect(conf[key[0]].mcatzp.command).toBe(bin);
+    expect(conf[key[0]].mcatzp.command).toEqual(id === 'opencode' ? [bin] : bin);
     expect((await row()).current).toBe(true);
     await removeFromClient(o, id);
     expect(Object.keys(JSON.parse(readFileSync(path, 'utf8'))[key[0]])).toEqual(['other']);
@@ -241,6 +242,11 @@ describe('Add to client', () => {
     expect(text).not.toContain('K = "v"');
     expect(text).toContain('[profiles.a]\nb = 1');
     expect(readFileSync(`${path}.bak`, 'utf8')).toContain('/old');
+  });
+  test('Claude Code shows its account', async () => {
+    const o = machine();
+    writeFileSync(join(o.home, '.claude.json'), JSON.stringify({ oauthAccount: { emailAddress: 'a@example.com', accountUuid: 'x' } }));
+    expect((await targets(o)).find((t) => t.id === 'claude-code')?.account).toBe('a@example.com');
   });
   test('Claude Code absent', async () => {
     expect((await targets(machine())).find((t) => t.id === 'claude-code')?.found).toBe(false);
