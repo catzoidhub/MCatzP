@@ -201,7 +201,8 @@ describe('Add to client', () => {
   ] as const)('%s: found, added beside what is there, removed', async (id, dir, file, key) => {
     const { o, bin } = await ready();
     const row = async () => (await targets(o)).find((t) => t.id === id)!;
-    expect((await row()).found).toBe(false);
+    // Warp also counts as found from /Applications, which is this machine's, not the test's.
+    if (id !== 'warp') expect((await row()).found).toBe(false);
     mkdirSync(join(o.home, dir), { recursive: true });
     expect(await row()).toMatchObject({ found: true, command: null, current: false });
     const path = join(o.home, file);
