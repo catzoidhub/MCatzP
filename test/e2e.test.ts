@@ -54,7 +54,7 @@ describe('MCatzP with fakecat', () => {
   test('lists fakecat tools with their tiers, after pairing the client by name', async () => {
     const { tools } = await client.listTools();
     const names = tools.map((t) => t.name);
-    expect(names).toEqual(['mcatzp_status', 'fakecat_list_toys', 'fakecat_get_toy', 'fakecat_rename_toy', 'fakecat_delete_toy']);
+    expect(names).toEqual(['mcatzp_status', 'fakecat_list_toys', 'fakecat_wash_toys', 'fakecat_get_toy', 'fakecat_rename_toy', 'fakecat_delete_toy']);
     expect(paired).toEqual(['mcatzp-e2e']);
     const del = tools.find((t) => t.name === 'fakecat_delete_toy')!;
     expect(del.annotations?.destructiveHint).toBe(true);

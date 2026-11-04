@@ -110,7 +110,7 @@ export function createMcatzpServer(opts: McatzpOptions = {}): { server: Server; 
     return { tools: [STATUS_TOOL, ...tools] };
   });
 
-  server.setRequestHandler(CallToolRequestSchema, async (req): Promise<CallToolResult> => {
+  server.setRequestHandler(CallToolRequestSchema, async (req, extra): Promise<CallToolResult> => {
     const name = req.params.name;
     const args = (req.params.arguments ?? {}) as Record<string, unknown>;
     if (name === STATUS_TOOL.name) {
@@ -126,7 +126,19 @@ export function createMcatzpServer(opts: McatzpOptions = {}): { server: Server; 
     await l.ready;
     if (l.error || !l.conn.hello) return failure(`${cat.name}: ${l.error ?? 'not connected'}`);
     try {
-      const result = await l.conn.call(name.slice(cat.id.length + 1), args);
+      // MCP progress, for a client that asked (a progressToken on its call). `progress` must only go up.
+      const token = req.params._meta?.progressToken;
+      let reached = 0;
+      const onProgress =
+        token === undefined
+          ? undefined
+          : (p: { message: string; percent?: number }) => {
+              reached = Math.max(reached, p.percent ?? reached);
+              void extra
+                .sendNotification({ method: 'notifications/progress', params: { progressToken: token, progress: reached, total: 100, message: p.message } })
+                .catch(() => {});
+            };
+      const result = await l.conn.call(name.slice(cat.id.length + 1), args, onProgress, extra.signal);
       return {
         content: [{ type: 'text', text: result.text }],
         ...(result.data !== undefined && isRecord(result.data) ? { structuredContent: result.data } : {}),
@@ -196,7 +208,7 @@ function explain(cat: Cat, e: unknown): string {
     case ErrorCodes.declined:
       return `The user declined this in ${cat.name}. Do not retry unless they ask.`;
     case ErrorCodes.outOfScope:
-      return `${e.message} The user can share it in ${cat.name} → Settings → AI → MCatzP.`;
+      return `${e.message} The user can share it in ${cat.name} → Settings → MCatzP.`;
     default:
       return e.message;
   }

@@ -27,6 +27,10 @@ import {
 
 export interface ActionContext {
   client: string;
+  /** Present when the client asked for progress: an action that takes a while reports here. */
+  progress?(p: { message: string; percent?: number }): void;
+  /** Aborts with the reason `cancelled` when the client gives up on the call, `closed` when its connection ends. */
+  signal: AbortSignal;
 }
 
 export interface ActionDef extends ActionInfo {
@@ -45,6 +49,8 @@ export interface ConfirmRequest {
   summary: string;
   /** The dialog may show "allow for this session". */
   allowSession: boolean;
+  /** The client gave up or left: nobody waits for an answer any more, so the question goes away. */
+  signal: AbortSignal;
 }
 
 /** 'deny' | 'once' | 'session' — destructive actions treat 'session' as 'once'. */
@@ -86,6 +92,8 @@ interface Conn {
   socket: net.Socket;
   client?: string;
   sessionAllowed: Set<string>;
+  /** Calls in progress, by request id. */
+  calls: Map<unknown, AbortController>;
   tokens: number;
   last: number;
 }
@@ -174,7 +182,7 @@ export class McatzpHost {
 
   private accept(socket: net.Socket): void {
     const rate = this.opts.rateLimit ?? { perSecond: 10, burst: 20 };
-    const conn: Conn = { socket, sessionAllowed: new Set(), tokens: rate.burst, last: Date.now() };
+    const conn: Conn = { socket, sessionAllowed: new Set(), calls: new Map(), tokens: rate.burst, last: Date.now() };
     this.conns.add(conn);
     socket.setEncoding('utf8');
     const reader = new LineReader(
@@ -182,7 +190,10 @@ export class McatzpHost {
       () => socket.destroy(),
     );
     socket.on('data', (d: string) => reader.push(d));
-    socket.on('close', () => this.conns.delete(conn));
+    socket.on('close', () => {
+      this.conns.delete(conn);
+      for (const c of conn.calls.values()) c.abort('closed');
+    });
     socket.on('error', () => socket.destroy());
   }
 
@@ -194,7 +205,10 @@ export class McatzpHost {
       conn.socket.write(encode({ jsonrpc: '2.0', id: null, error: { code: ErrorCodes.parseError, message: 'Parse error' } }));
       return;
     }
-    if (req.id === undefined) return; // notifications from MCatzP: none defined yet
+    if (req.id === undefined) {
+      if (req.method === Methods.actionsCancel) conn.calls.get((req.params as { callId?: unknown })?.callId)?.abort('cancelled');
+      return;
+    }
     try {
       const result = await this.handle(conn, req);
       conn.socket.write(encode({ jsonrpc: '2.0', id: req.id, result }));
@@ -216,7 +230,15 @@ export class McatzpHost {
     if (req.method === Methods.listActions) {
       return { actions: this.actions().map(info) } satisfies ListActionsResult;
     }
-    if (req.method === Methods.call) return this.call(conn, req.params as CallParams);
+    if (req.method === Methods.call) {
+      const control = new AbortController();
+      conn.calls.set(req.id, control);
+      try {
+        return await this.call(conn, req.params as CallParams, control.signal);
+      } finally {
+        conn.calls.delete(req.id);
+      }
+    }
     throw new ProtocolError(ErrorCodes.methodNotFound, `Unknown method ${req.method}`);
   }
 
@@ -249,7 +271,7 @@ export class McatzpHost {
     return { protocol: PROTOCOL_VERSION, app: { ...this.opts.app, platform: this.platform } };
   }
 
-  private async call(conn: Conn, p: CallParams): Promise<CallResult> {
+  private async call(conn: Conn, p: CallParams, signal: AbortSignal): Promise<CallResult> {
     const client = conn.client!;
     const action = this.actions().find((a) => a.name === p?.name);
     const base = { client, method: Methods.call, action: p?.name };
@@ -272,7 +294,11 @@ export class McatzpHost {
       const key = `${client}\u0000${action.name}`;
       if (!(allowSession && conn.sessionAllowed.has(key))) {
         const summary = this.opts.describe?.(action, args) ?? `${action.title}: ${JSON.stringify(args)}`;
-        const answer = await this.opts.confirm({ client, action: info(action), args, summary, allowSession });
+        const answer = await this.opts.confirm({ client, action: info(action), args, summary, allowSession, signal });
+        if (signal.aborted) {
+          this.write({ ...base, tier: action.tier, outcome: 'declined', reason: 'the client gave up on it' });
+          throw new ProtocolError(ErrorCodes.declined, 'The client cancelled the call before it was allowed; nothing ran.');
+        }
         if (answer === 'deny') {
           this.write({ ...base, tier: action.tier, outcome: 'declined' });
           throw new ProtocolError(ErrorCodes.declined, 'The user declined it in the app.');
@@ -281,7 +307,14 @@ export class McatzpHost {
       }
     }
     try {
-      const result = await action.run(args, { client });
+      const id = p.progressId;
+      const progress =
+        typeof id === 'number'
+          ? (x: { message: string; percent?: number }) => {
+              if (!conn.socket.destroyed) conn.socket.write(encode({ jsonrpc: '2.0', method: Methods.actionsProgress, params: { progressId: id, ...x } }));
+            }
+          : undefined;
+      const result = await action.run(args, { client, signal, ...(progress ? { progress } : {}) });
       this.write({ ...base, tier: action.tier, outcome: 'ok' });
       return result;
     } catch (e) {

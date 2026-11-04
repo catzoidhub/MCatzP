@@ -16,7 +16,7 @@ if (arg === '--help' || arg === '-h') {
 Add it to your MCP client as a stdio server, for example:
   claude mcp add mcatzp -- npx -y mcatzp
 
-Then turn MCatzP on in each app: Settings → AI → MCatzP.
+Then turn MCatzP on in each app: Settings → MCatzP.
 https://catzoid.com/mcatzp`);
   process.exit(0);
 }

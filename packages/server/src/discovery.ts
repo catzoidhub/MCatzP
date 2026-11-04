@@ -77,7 +77,7 @@ export function describeState(c: Cat): string {
     case 'outdated':
       return `${c.name}${c.version ? ` ${c.version}` : ''} is installed but cannot talk to MCatzP yet: update it to 1.1.0 or later.`;
     case 'off':
-      return `${c.name} is installed, but MCatzP is off in it: turn it on in ${c.name} → Settings → AI → MCatzP.`;
+      return `${c.name} is installed, but MCatzP is off in it: turn it on in ${c.name} → Settings → MCatzP.`;
     case 'on':
       return `${c.name} has MCatzP on.`;
   }

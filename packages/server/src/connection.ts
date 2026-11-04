@@ -12,6 +12,7 @@ import {
   type ListActionsResult,
   Methods,
   PROTOCOL_VERSION,
+  type ProgressParams,
   ProtocolError,
   type RpcMessage,
 } from '@catzoid/mcatzp-protocol';
@@ -21,6 +22,9 @@ interface Pending {
   resolve(v: unknown): void;
   reject(e: Error): void;
   timer: NodeJS.Timeout;
+  onProgress?: (p: { message: string; percent?: number }) => void;
+  /** Runs out from the last sign of life, so a long action that reports progress is not cut off. */
+  restart?: () => NodeJS.Timeout;
 }
 
 /** How long a call may wait — a change waits for the user's click in the app. */
@@ -72,24 +76,37 @@ export class AppConnection {
     return this.actions;
   }
 
-  call(name: string, args: Record<string, unknown>): Promise<CallResult> {
-    return this.request(Methods.call, { name, args }, CALL_TIMEOUT_MS) as Promise<CallResult>;
+  call(name: string, args: Record<string, unknown>, onProgress?: (p: { message: string; percent?: number }) => void, signal?: AbortSignal): Promise<CallResult> {
+    const callId = this.nextId;
+    const done = this.request(Methods.call, { name, args }, CALL_TIMEOUT_MS, onProgress) as Promise<CallResult>;
+    if (signal) {
+      const cancel = () => {
+        if (!this.closed) this.socket?.write(encode({ jsonrpc: '2.0', method: Methods.actionsCancel, params: { callId } }));
+      };
+      if (signal.aborted) cancel();
+      else {
+        signal.addEventListener('abort', cancel, { once: true });
+        void done.finally(() => signal.removeEventListener('abort', cancel)).catch(() => {});
+      }
+    }
+    return done;
   }
 
   close(): void {
     this.socket?.destroy();
   }
 
-  private request(method: string, params: unknown, timeoutMs: number): Promise<unknown> {
+  private request(method: string, params: Record<string, unknown>, timeoutMs: number, onProgress?: Pending['onProgress']): Promise<unknown> {
     if (this.closed || !this.socket) return Promise.reject(new ProtocolError(ErrorCodes.internal, 'Not connected.'));
     const id = this.nextId++;
     return new Promise((resolve, reject) => {
-      const timer = setTimeout(() => {
-        this.pending.delete(id);
-        reject(new ProtocolError(ErrorCodes.timeout, `${this.entry.app.name} did not answer in time.`));
-      }, timeoutMs);
-      this.pending.set(id, { resolve, reject, timer });
-      this.socket!.write(encode({ jsonrpc: '2.0', id, method, params }));
+      const restart = () =>
+        setTimeout(() => {
+          this.pending.delete(id);
+          reject(new ProtocolError(ErrorCodes.timeout, `${this.entry.app.name} did not answer in time.`));
+        }, timeoutMs);
+      this.pending.set(id, { resolve, reject, timer: restart(), onProgress, restart });
+      this.socket!.write(encode({ jsonrpc: '2.0', id, method, params: onProgress ? { ...params, progressId: id } : params }));
     });
   }
 
@@ -104,6 +121,14 @@ export class AppConnection {
       if (msg.method === Methods.actionsChanged) {
         this.actions = undefined;
         this.onChanged();
+      } else if (msg.method === Methods.actionsProgress) {
+        const x = msg.params as ProgressParams;
+        const p = this.pending.get(x?.progressId);
+        if (p?.onProgress) {
+          clearTimeout(p.timer);
+          p.timer = p.restart!();
+          p.onProgress({ message: String(x.message).slice(0, 300), ...(typeof x.percent === 'number' ? { percent: x.percent } : {}) });
+        }
       }
       return;
     }

@@ -70,6 +70,17 @@ export interface ListActionsResult {
 export interface CallParams {
   name: string;
   args: Record<string, unknown>;
+  /** MCatzP's client asked for progress: the app may send `actions.progress` with this id while the call runs. */
+  progressId?: number;
+}
+
+/** Notification app → MCatzP, for a call that carried `progressId`. */
+export interface ProgressParams {
+  progressId: number;
+  /** One line for the user, e.g. "Downloading 41% (143 of 348 MB)". */
+  message: string;
+  /** How far the whole action is, 0–100, when the app can tell; never goes down. */
+  percent?: number;
 }
 
 export interface CallResult {
@@ -85,6 +96,10 @@ export const Methods = {
   call: 'actions.call',
   /** Notification app → MCatzP: the action list or scopes changed. */
   actionsChanged: 'actions.changed',
+  /** Notification app → MCatzP: how a running call is doing. */
+  actionsProgress: 'actions.progress',
+  /** Notification MCatzP → app: the client gave up on a call (`callId` = the id of its actions.call). */
+  actionsCancel: 'actions.cancel',
 } as const;
 
 // ---- errors ----

@@ -25,6 +25,20 @@ export function fakecatActions(toys: Toy[]): ActionDef[] {
       run: () => ({ text: toys.map((t) => `${t.id}: ${t.name} (${t.squeaks} squeaks)`).join('\n') || 'No toys.', data: { toys } }),
     },
     {
+      name: 'wash_toys',
+      title: 'Wash the toys',
+      description: 'Takes a moment and reports how it goes.',
+      tier: 'read',
+      input: { type: 'object', properties: {}, additionalProperties: false },
+      run: async (_args, ctx) => {
+        for (const percent of [25, 50, 75]) {
+          ctx.progress?.({ message: `Washing ${percent}%`, percent });
+          await new Promise((r) => setTimeout(r, 10));
+        }
+        return { text: 'Clean.' };
+      },
+    },
+    {
       name: 'get_toy',
       title: 'Get a toy',
       description: 'Show one toy by its id.',

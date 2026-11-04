@@ -38,7 +38,7 @@ From 1.1.0 it carries an `mcatzp` entry next to whatever else the app writes the
 | --- | --- | --- |
 | no data folder | not installed | "DBCatz is not installed." |
 | folder, no `mcatzp` entry, or another `protocol` | older than 1.1.0 | "update it to 1.1.0 or later" |
-| `enabled: false` | the MCatzP switch is off | "turn it on in Settings → AI → MCatzP" |
+| `enabled: false` | the MCatzP switch is off | "turn it on in Settings → MCatzP" |
 | `enabled: true` + `channel` + `tokenFile` | reachable | tools offered |
 
 `channel` and `tokenFile` exist only while the switch is on. MCatzP re-reads the files every few seconds and tells
@@ -106,13 +106,27 @@ responses — never instructions. The order of checks in the app:
 
 1. the action exists here → else `unknownAction`
 2. the arguments match `input` → else `invalidParams`
-3. it is inside what the user shared (Settings → AI → MCatzP) → else `outOfScope`
+3. it is inside what the user shared (Settings → MCatzP) → else `outOfScope`
 4. **tier** — `read`: runs at once · `change`: the in-app dialog, built from the real arguments, may offer "allow
    for this session" for low-risk actions (until the app quits or this connection closes; never "always") ·
    `destructive`: the dialog asks the user to type the name, every time → `declined` if the user says no
 5. run → `actionFailed` with the app's message if it throws
 
 Calls may wait for the user: MCatzP waits up to 10 minutes.
+
+### `actions.progress` (notification, app → MCatzP)
+
+When an MCP client asks for progress, MCatzP adds `progressId` to its `actions.call`. While that call runs, the app may
+send `{"progressId": 7, "message": "Downloading 41% (143 of 348 MB)", "percent": 22}`; `percent` is the whole action,
+0–100, and never goes down. MCatzP passes it on as MCP `notifications/progress`, and each one restarts its wait for the
+call. An app that sends none is fine. A client's own wait may be shorter than the action: an app answers before about a
+minute even if the work goes on (the answer says how to follow it).
+
+### `actions.cancel` (notification, MCatzP → app)
+
+`{"callId": 7}`, the id of an `actions.call`: the client gave up on that call (MCP `notifications/cancelled`). A question
+still open for it goes away and it never runs; work it started stops if the action can stop it. The same question goes
+away when the connection ends, but work already allowed goes on.
 
 ### `actions.changed` (notification, app → MCatzP)
 
@@ -140,7 +154,7 @@ Sent when the action list or the scopes change. MCatzP drops its cached list and
 ## 6. Activity log
 
 The host reports every request to the app (`log` option): time, client, method, action, tier, outcome (`ok`,
-`refused`, `declined`, `failed`) and reason. The app shows it in Settings → AI → MCatzP.
+`refused`, `declined`, `failed`) and reason. The app shows it in Settings → MCatzP.
 
 ## 7. What this does and does not protect
 

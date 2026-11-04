@@ -98,3 +98,80 @@ test('the token changes every time the switch goes on', async () => {
   await cat.host.start();
   expect(await token()).not.toBe(before);
 });
+
+test('progress goes out only for a call that asked for it', async () => {
+  const s = net.connect(cat.host.entry().channel!);
+  await new Promise((r) => s.once('connect', r));
+  s.setEncoding('utf8');
+  const lines: any[] = [];
+  let buf = '';
+  s.on('data', (d: string) => {
+    buf += d;
+    let i: number;
+    while ((i = buf.indexOf('\n')) >= 0) {
+      lines.push(JSON.parse(buf.slice(0, i)));
+      buf = buf.slice(i + 1);
+    }
+  });
+  const done = async (id: number) => {
+    while (!lines.some((l) => l.id === id)) await new Promise((r) => setTimeout(r, 5));
+  };
+  const write = (m: unknown) => s.write(JSON.stringify(m) + '\n');
+  write({ jsonrpc: '2.0', id: 1, method: 'hello', params: { protocol: PROTOCOL_VERSION, token: await token(), client: { name: 'progress-test' }, server: { name: 'test', version: '0' } } });
+  await done(1);
+  await new Promise((r) => setTimeout(r, 1100));
+  write({ jsonrpc: '2.0', id: 2, method: 'actions.call', params: { name: 'wash_toys', args: {} } });
+  await done(2);
+  expect(lines.filter((l) => l.method === 'actions.progress').length).toBe(0);
+  await new Promise((r) => setTimeout(r, 1100));
+  write({ jsonrpc: '2.0', id: 3, method: 'actions.call', params: { name: 'wash_toys', args: {}, progressId: 3 } });
+  await done(3);
+  const got = lines.filter((l) => l.method === 'actions.progress').map((l) => l.params);
+  expect(got.map((g) => g.percent)).toEqual([25, 50, 75]);
+  expect(got.every((g) => g.progressId === 3)).toBe(true);
+  s.destroy();
+});
+
+test('a client giving up closes the question, and nothing runs', async () => {
+  const dir2 = await mkdtemp(path.join(os.tmpdir(), 'mcatzp-cancel-'));
+  let seen: AbortSignal | undefined;
+  const c2 = await startFakecat(dir2, {
+    pair: async () => true,
+    confirm: (req) =>
+      new Promise((done) => {
+        seen = req.signal;
+        req.signal.addEventListener('abort', () => done('deny'), { once: true });
+      }),
+  });
+  const s = net.connect(c2.host.entry().channel!);
+  await new Promise((r) => s.once('connect', r));
+  s.setEncoding('utf8');
+  const lines: any[] = [];
+  let buf = '';
+  s.on('data', (d: string) => {
+    buf += d;
+    let i: number;
+    while ((i = buf.indexOf('\n')) >= 0) {
+      lines.push(JSON.parse(buf.slice(0, i)));
+      buf = buf.slice(i + 1);
+    }
+  });
+  const waitFor = async (id: number) => {
+    while (!lines.some((l) => l.id === id)) await new Promise((r) => setTimeout(r, 5));
+    return lines.find((l) => l.id === id);
+  };
+  const write = (m: unknown) => s.write(JSON.stringify(m) + '\n');
+  const t = await readFile(c2.host.entry().tokenFile!, 'utf8');
+  write({ jsonrpc: '2.0', id: 1, method: 'hello', params: { protocol: PROTOCOL_VERSION, token: t, client: { name: 'cancel-test' }, server: { name: 'test', version: '0' } } });
+  await waitFor(1);
+  write({ jsonrpc: '2.0', id: 2, method: 'actions.call', params: { name: 'rename_toy', args: { id: 'mouse', name: 'Renamed' } } });
+  while (!seen) await new Promise((r) => setTimeout(r, 5));
+  write({ jsonrpc: '2.0', method: 'actions.cancel', params: { callId: 2 } });
+  const answer = await waitFor(2);
+  expect(answer.error.code).toBe(ErrorCodes.declined);
+  expect(answer.error.message).toContain('nothing ran');
+  expect(seen.aborted).toBe(true);
+  s.destroy();
+  await c2.stop();
+  await rm(dir2, { recursive: true, force: true });
+});
