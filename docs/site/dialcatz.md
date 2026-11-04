@@ -52,8 +52,9 @@ can still get through.
 
 ## What it asks first
 
-Every change shows a dialog in DialCatz, built from what will really happen, not from the assistant's words. **Don't Allow**
-is the default.
+Stopping work runs at once, without a dialog: a request being sent, a collection run, an open WebSocket, a Git
+command, an update download. Every other change shows a dialog in DialCatz, built from what will really happen, not
+from the assistant's words. **Don't Allow** is the default.
 
 | What | How DialCatz asks |
 |---|---|

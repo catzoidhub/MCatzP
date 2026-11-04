@@ -54,8 +54,9 @@ random token under an ordinary name that DoCatz does not know as secret can stil
 
 ## What it asks first
 
-Every change shows a dialog in DoCatz, built from what will really happen, not from the assistant's words. **Don't Allow**
-is the default.
+Stopping work runs at once, without a dialog: a compose run, the engine starting, a migration, an install of a Catzoid
+app, an update download. Every other change shows a dialog in DoCatz, built from what will really happen, not from the
+assistant's words. **Don't Allow** is the default.
 
 | What | How DoCatz asks |
 |---|---|

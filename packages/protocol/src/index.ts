@@ -22,6 +22,8 @@ export interface BridgeEntry {
   protocol: number;
   /** false while the MCatzP switch in the app is off; then no channel exists. */
   enabled: boolean;
+  /** true when `enabled` is false only because the app quit: its switch is still on. */
+  closed?: boolean;
   /** Unix socket path or `\\.\pipe\…` name; only while enabled. */
   channel?: string;
   /** File holding the session token (0600); only while enabled. */

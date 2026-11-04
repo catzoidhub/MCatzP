@@ -1,12 +1,13 @@
 // A client that starts while the pairing dialog is open: its first tools/list must not settle for mcatzp_status,
 // because not every client reloads its tools after list_changed.
 import { afterEach, expect, test } from 'bun:test';
-import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import net from 'node:net';
 import os from 'node:os';
 import path from 'node:path';
 import { startFakecat } from '@catzoid/mcatzp-fakecat';
 import { PROTOCOL_VERSION } from '@catzoid/mcatzp-protocol';
+import { describeState, discover } from '../packages/server/src/discovery.js';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
 
@@ -83,4 +84,17 @@ test('one Allow pairs a client once, however many of its sessions are waiting', 
   for (const r of await Promise.all(sessions)) expect(JSON.parse(r).result.app.id).toBe('fakecat');
   expect(questions).toBe(1);
   expect(paired).toEqual(['many']);
+});
+
+test('a closed app is told apart from one with MCatzP off', async () => {
+  const dir = await mkdtemp(path.join(os.tmpdir(), 'mcatzp-closed-'));
+  clean.push(() => rm(dir, { recursive: true, force: true }));
+  const entry = { protocol: PROTOCOL_VERSION, enabled: false, app: { id: 'fakecat', name: 'Fakecat', version: '1.1.0' } };
+  const file = path.join(dir, 'bridge.json');
+  const env = { MCATZP_NO_DEFAULT_APPS: '1', MCATZP_BRIDGE_PATHS: file };
+  const say = async () => describeState((await discover(env))[0]!);
+  await writeFile(file, JSON.stringify({ mcatzp: { ...entry, closed: true } }));
+  expect(await say()).toBe('Fakecat is closed: open it to use its tools. MCatzP stays on in it.');
+  await writeFile(file, JSON.stringify({ mcatzp: entry }));
+  expect(await say()).toContain('MCatzP is off in it');
 });

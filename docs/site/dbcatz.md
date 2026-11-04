@@ -52,8 +52,8 @@ goes by the name, so it can miss a secret kept under an ordinary name. Connectio
 
 ## What it asks first
 
-Every change shows a dialog in DBCatz, built from what will really happen, not from the assistant's words. **Don't Allow**
-is the default.
+One change runs at once, without a dialog: stopping a running export, import or backup. Every other change shows a
+dialog in DBCatz, built from what will really happen, not from the assistant's words. **Don't Allow** is the default.
 
 | What | How DBCatz asks |
 |---|---|

@@ -8,6 +8,7 @@ import { type BridgeEntry, KNOWN_APPS, PROTOCOL_VERSION } from '@catzoid/mcatzp-
 export type CatState =
   | 'not-installed' // no data folder
   | 'outdated' // installed, but no `mcatzp` entry (older than 1.1.0) or another protocol
+  | 'closed' // the app quit with its MCatzP switch on
   | 'off' // the MCatzP switch in the app is off
   | 'on';
 
@@ -47,7 +48,7 @@ async function readCat(id: string, name: string, bridgeFile: string): Promise<Ca
     return { id, name, bridgeFile, version, state: 'outdated' };
   }
   const on = entry.enabled && typeof entry.channel === 'string' && typeof entry.tokenFile === 'string';
-  return { id, name, bridgeFile, version: entry.app?.version ?? version, entry, state: on ? 'on' : 'off' };
+  return { id, name, bridgeFile, version: entry.app?.version ?? version, entry, state: on ? 'on' : entry.closed === true ? 'closed' : 'off' };
 }
 
 /**
@@ -76,8 +77,11 @@ export function describeState(c: Cat): string {
       return `${c.name} is not installed.`;
     case 'outdated':
       return `${c.name}${c.version ? ` ${c.version}` : ''} is installed but cannot talk to MCatzP yet: update it to 1.1.0 or later.`;
+    case 'closed':
+      return `${c.name} is closed: open it to use its tools. MCatzP stays on in it.`;
     case 'off':
-      return `${c.name} is installed, but MCatzP is off in it: turn it on in ${c.name} → Settings → MCatzP.`;
+      // An app that does not write `closed` yet looks the same when it has simply quit.
+      return `${c.name} is closed, or MCatzP is off in it: open ${c.name} and check Settings → MCatzP.`;
     case 'on':
       return `${c.name} has MCatzP on.`;
   }

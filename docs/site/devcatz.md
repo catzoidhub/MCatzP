@@ -48,8 +48,9 @@ out. A long random token under an ordinary name can still get through, which is 
 
 ## What it asks first
 
-Every change shows a dialog in DevCatz, built from what will really happen, not from the assistant's words. **Don't Allow**
-is the default.
+Stopping work runs at once, without a dialog: an install, a Git or Docker command, an upload, tasks waiting in a
+search engine, a public share. So does dismissing a notice. Every other change shows a dialog in DevCatz, built from
+what will really happen, not from the assistant's words. **Don't Allow** is the default.
 
 | What | How DevCatz asks |
 |---|---|

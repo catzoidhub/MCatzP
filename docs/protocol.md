@@ -38,7 +38,8 @@ From 1.1.0 it carries an `mcatzp` entry next to whatever else the app writes the
 | --- | --- | --- |
 | no data folder | not installed | "DBCatz is not installed." |
 | folder, no `mcatzp` entry, or another `protocol` | older than 1.1.0 | "update it to 1.1.0 or later" |
-| `enabled: false` | the MCatzP switch is off | "turn it on in Settings → MCatzP" |
+| `enabled: false`, `closed: true` | the app quit with its switch on | "open it to use its tools" |
+| `enabled: false` | the MCatzP switch is off, or an app that does not write `closed` quit | "open it and check Settings → MCatzP" |
 | `enabled: true` + `channel` + `tokenFile` | reachable | tools offered |
 
 `channel` and `tokenFile` exist only while the switch is on. MCatzP re-reads the files every few seconds and tells
