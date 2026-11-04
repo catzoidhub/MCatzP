@@ -1,14 +1,27 @@
 {
   "name": "mcatzp",
-  "version": "0.1.0",
-  "description": "MCatzP — the MCP with the cats inside: one MCP server for every Catzoid app (DevCatz, DBCatz, DialCatz, DoCatz).",
+  "version": "1.0.0",
+  "description": "MCatzP \u2014 the MCP with the cats inside: one MCP server for every Catzoid app (DevCatz, DBCatz, DialCatz, DoCatz).",
   "license": "Apache-2.0",
   "homepage": "https://catzoid.com/mcatzp",
-  "repository": { "type": "git", "url": "git+https://github.com/catzoidhub/MCatzP.git" },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/catzoidhub/MCatzP.git"
+  },
   "type": "module",
-  "bin": { "mcatzp": "dist/index.js" },
-  "files": ["dist"],
-  "engines": { "node": ">=20" },
+  "bin": {
+    "mcatzp": "dist/index.js"
+  },
+  "files": [
+    "dist",
+    "!dist/bin",
+    "LICENSE",
+    "NOTICE",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "compile": "bun build src/index.ts --compile --outfile dist/bin/mcatzp"

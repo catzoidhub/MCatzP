@@ -4,3 +4,6 @@ dist/
 .DS_Store
 TODO.md
 .fakecat/
+packages/*/LICENSE
+packages/*/NOTICE
+packages/server/README.md

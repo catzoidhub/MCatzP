@@ -7,8 +7,22 @@
 
 <p align="center"><a href="https://catzoid.com/mcatzp">catzoid.com/mcatzp</a></p>
 
-> **In development.** MCatzP 1.0.0 ships together with version 1.1.0 of the four apps, the first versions that talk
-> to it. Until then nothing here works with the released apps.
+> Works with DevCatz, DBCatz, DialCatz and DoCatz **1.1.0 or later**; an older app tells you to update it.
+
+## Install
+
+Settings → MCatzP in any of the four apps installs it and adds it to your AI client. Or:
+
+```bash
+brew install catzoidhub/catz/mcatzp
+```
+
+```bash
+claude mcp add mcatzp -- npx -y mcatzp
+```
+
+Binaries for macOS (Apple silicon, Intel; signed and notarized) and Windows (x64, not signed) are on
+[catzoid.com/mcatzp](https://catzoid.com/mcatzp).
 
 MCatzP lets an AI assistant — Claude Code, ZCode, Claude Desktop, Cursor, Gemini CLI, Codex CLI or any client that
 speaks MCP — use the Catzoid apps on your computer. It runs locally over stdio; each app decides what it shares, and
