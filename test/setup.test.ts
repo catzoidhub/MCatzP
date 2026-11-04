@@ -190,6 +190,13 @@ describe('Add to client', () => {
     ['cline', `${MAC}/Code/User/globalStorage/saoudrizwan.claude-dev`, `${MAC}/Code/User/globalStorage/saoudrizwan.claude-dev/settings/cline_mcp_settings.json`, ['mcpServers']],
     ['gemini', '.gemini', '.gemini/settings.json', ['mcpServers']],
     ['opencode', '.config/opencode', '.config/opencode/opencode.json', ['mcp']],
+    ['copilot', '.copilot', '.copilot/mcp-config.json', ['mcpServers']],
+    ['kiro', '.kiro', '.kiro/settings/mcp.json', ['mcpServers']],
+    ['antigravity', '.gemini/antigravity', '.gemini/antigravity/mcp_config.json', ['mcpServers']],
+    ['qwen', '.qwen', '.qwen/settings.json', ['mcpServers']],
+    ['lmstudio', '.lmstudio', '.lmstudio/mcp.json', ['mcpServers']],
+    ['roo', `${MAC}/Code/User/globalStorage/rooveterinaryinc.roo-cline`, `${MAC}/Code/User/globalStorage/rooveterinaryinc.roo-cline/settings/mcp_settings.json`, ['mcpServers']],
+    ['amp', '.config/amp', '.config/amp/settings.json', ['amp.mcpServers']],
   ] as const)('%s: found, added beside what is there, removed', async (id, dir, file, key) => {
     const { o, bin } = await ready();
     const row = async () => (await targets(o)).find((t) => t.id === id)!;

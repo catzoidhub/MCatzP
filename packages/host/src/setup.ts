@@ -40,7 +40,7 @@ export interface McatzpInstallProgress {
   total: number;
 }
 
-export const MCATZP_TARGETS = ['claude-code', 'zcode', 'claude-desktop', 'cursor', 'windsurf', 'vscode', 'cline', 'gemini', 'codex', 'opencode'] as const;
+export const MCATZP_TARGETS = ['claude-code', 'zcode', 'claude-desktop', 'cursor', 'windsurf', 'vscode', 'cline', 'gemini', 'codex', 'opencode', 'copilot', 'kiro', 'antigravity', 'qwen', 'lmstudio', 'roo', 'amp'] as const;
 export type McatzpTargetId = (typeof MCATZP_TARGETS)[number];
 
 export interface McatzpTarget {
@@ -243,6 +243,7 @@ const codexFile = (c: Ctx) => join(c.home, '.codex', 'config.toml');
 /** Where desktop apps keep their settings. */
 const appData = (c: Ctx) => (c.win ? (c.env.APPDATA ?? join(c.home, 'AppData', 'Roaming')) : join(c.home, 'Library', 'Application Support'));
 const vscodeUser = (c: Ctx) => join(appData(c), 'Code', 'User');
+const ampDir = (c: Ctx) => (c.win ? join(appData(c), 'amp') : join(c.home, '.config', 'amp'));
 const onPath = (c: Ctx, name: string) => pathDirs(c).some((d) => [name, `${name}.exe`, `${name}.cmd`].some((n) => existsSync(join(d, n))));
 
 /** Through its own command, which guards the file Claude Code keeps writing to. A shell: on Windows it may be a .cmd. */
@@ -283,6 +284,42 @@ const JSON_CLIENTS: JsonClient[] = [
     file: (c) => join(c.home, '.config', 'opencode', 'opencode.json'),
     key: ['mcp'],
     entry: (command) => ({ type: 'local', command: [command], enabled: true }),
+  },
+  {
+    id: 'copilot',
+    label: 'Copilot CLI',
+    found: (c) => existsSync(join(c.home, '.copilot')) || onPath(c, 'copilot'),
+    file: (c) => join(c.home, '.copilot', 'mcp-config.json'),
+    key: ['mcpServers'],
+    entry: (command) => ({ type: 'local', ...plain(command), tools: ['*'] }),
+  },
+  { id: 'kiro', label: 'Kiro', found: (c) => existsSync(join(c.home, '.kiro')) || onPath(c, 'kiro'), file: (c) => join(c.home, '.kiro', 'settings', 'mcp.json'), key: ['mcpServers'], entry: plain },
+  {
+    id: 'antigravity',
+    label: 'Antigravity',
+    found: (c) => ['config', 'antigravity'].some((d) => existsSync(join(c.home, '.gemini', d))),
+    // Newer versions read .gemini/config; older ones .gemini/antigravity.
+    file: (c) => join(c.home, '.gemini', existsSync(join(c.home, '.gemini', 'config')) ? 'config' : 'antigravity', 'mcp_config.json'),
+    key: ['mcpServers'],
+    entry: plain,
+  },
+  { id: 'qwen', label: 'Qwen Code', found: (c) => existsSync(join(c.home, '.qwen')) || onPath(c, 'qwen'), file: (c) => join(c.home, '.qwen', 'settings.json'), key: ['mcpServers'], entry: plain },
+  { id: 'lmstudio', label: 'LM Studio', found: (c) => existsSync(join(c.home, '.lmstudio')), file: (c) => join(c.home, '.lmstudio', 'mcp.json'), key: ['mcpServers'], entry: plain },
+  {
+    id: 'roo',
+    label: 'Roo Code',
+    found: (c) => existsSync(join(vscodeUser(c), 'globalStorage', 'rooveterinaryinc.roo-cline')),
+    file: (c) => join(vscodeUser(c), 'globalStorage', 'rooveterinaryinc.roo-cline', 'settings', 'mcp_settings.json'),
+    key: ['mcpServers'],
+    entry: plain,
+  },
+  {
+    id: 'amp',
+    label: 'Amp',
+    found: (c) => existsSync(ampDir(c)) || onPath(c, 'amp'),
+    file: (c) => join(ampDir(c), 'settings.json'),
+    key: ['amp.mcpServers'],
+    entry: plain,
   },
   { id: 'gemini', label: 'Gemini CLI', found: (c) => existsSync(join(c.home, '.gemini')) || onPath(c, 'gemini'), file: (c) => join(c.home, '.gemini', 'settings.json'), key: ['mcpServers'], entry: plain },
 ];
@@ -356,7 +393,8 @@ export async function targets(o: SetupOptions): Promise<McatzpTarget[]> {
   return [
     { ...row('claude-code', 'Claude Code', onPath(c, 'claude'), commandOf(claude?.mcpServers)), ...(typeof account === 'string' ? { account } : {}) },
     ...JSON_CLIENTS.map((j) => row(j.id, j.label, j.found(c), commandOf(dig(readJson(j.file(c)), j.key)))),
-    row('codex', 'Codex CLI', existsSync(join(c.home, '.codex')) || onPath(c, 'codex'), codexTable(readText(codexFile(c)))?.command ?? null),
+    // The CLI, the IDE extension and the desktop app read the same file.
+    row('codex', 'Codex', existsSync(join(c.home, '.codex')) || onPath(c, 'codex') || (c.mac && existsSync('/Applications/Codex.app')), codexTable(readText(codexFile(c)))?.command ?? null),
   ];
 }
 
