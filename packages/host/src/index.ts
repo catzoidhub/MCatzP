@@ -294,7 +294,15 @@ export class McatzpHost {
       const key = `${client}\u0000${action.name}`;
       if (!(allowSession && conn.sessionAllowed.has(key))) {
         const summary = this.opts.describe?.(action, args) ?? `${action.title}: ${JSON.stringify(args)}`;
-        const answer = await this.opts.confirm({ client, action: info(action), args, summary, allowSession, signal });
+        // A question that cannot be put (the target does not exist, the port is taken) is the end of it: nothing runs unasked.
+        let answer: ConfirmAnswer;
+        try {
+          answer = await this.opts.confirm({ client, action: info(action), args, summary, allowSession, signal });
+        } catch (e) {
+          const message = e instanceof Error ? e.message : String(e);
+          this.write({ ...base, tier: action.tier, outcome: 'failed', reason: message });
+          throw new ProtocolError(ErrorCodes.actionFailed, message);
+        }
         if (signal.aborted) {
           this.write({ ...base, tier: action.tier, outcome: 'declined', reason: 'the client gave up on it' });
           throw new ProtocolError(ErrorCodes.declined, 'The client cancelled the call before it was allowed; nothing ran.');

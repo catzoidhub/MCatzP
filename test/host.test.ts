@@ -175,3 +175,42 @@ test('a client giving up closes the question, and nothing runs', async () => {
   await c2.stop();
   await rm(dir2, { recursive: true, force: true });
 });
+
+test('a question that cannot be put stops the action, and nothing runs unasked', async () => {
+  const dir3 = await mkdtemp(path.join(os.tmpdir(), 'mcatzp-throw-'));
+  const c3 = await startFakecat(dir3, {
+    pair: async () => true,
+    confirm: async () => {
+      throw new Error('That port is taken');
+    },
+  });
+  const s = net.connect(c3.host.entry().channel!);
+  await new Promise((r) => s.once('connect', r));
+  s.setEncoding('utf8');
+  const lines: any[] = [];
+  let buf = '';
+  s.on('data', (d: string) => {
+    buf += d;
+    let i: number;
+    while ((i = buf.indexOf('\n')) >= 0) {
+      lines.push(JSON.parse(buf.slice(0, i)));
+      buf = buf.slice(i + 1);
+    }
+  });
+  const waitFor = async (id: number) => {
+    while (!lines.some((l) => l.id === id)) await new Promise((r) => setTimeout(r, 5));
+    return lines.find((l) => l.id === id);
+  };
+  const write = (m: unknown) => s.write(JSON.stringify(m) + '\n');
+  write({ jsonrpc: '2.0', id: 1, method: 'hello', params: { protocol: PROTOCOL_VERSION, token: await readFile(c3.host.entry().tokenFile!, 'utf8'), client: { name: 'throw-test' }, server: { name: 'test', version: '0' } } });
+  await waitFor(1);
+  write({ jsonrpc: '2.0', id: 2, method: 'actions.call', params: { name: 'rename_toy', args: { id: 'mouse', name: 'Renamed' } } });
+  const answer = await waitFor(2);
+  expect(answer.error.code).toBe(ErrorCodes.actionFailed);
+  expect(answer.error.message).toBe('That port is taken');
+  write({ jsonrpc: '2.0', id: 3, method: 'actions.call', params: { name: 'list_toys', args: {} } });
+  expect((await waitFor(3)).result.text).toContain('Felt mouse');
+  s.destroy();
+  await c3.stop();
+  await rm(dir3, { recursive: true, force: true });
+});
