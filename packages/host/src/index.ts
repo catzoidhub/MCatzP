@@ -78,6 +78,8 @@ export interface HostOptions {
   /** Already-approved clients (the app persists them; revocable in Settings). */
   isPaired?(clientName: string): boolean;
   onPaired?(clientName: string): void;
+  /** The approved clients' names, written to bridge.json so the other Catzoid apps can show where each is approved. */
+  approved?(): string[];
   /** Whether the call is inside what the user shared; default: everything. */
   inScope?(action: ActionDef, args: Record<string, unknown>): boolean;
   /** One line for the dialog; default: the action title and its arguments. */
@@ -170,7 +172,7 @@ export class McatzpHost {
     return {
       protocol: PROTOCOL_VERSION,
       enabled: on,
-      ...(on ? { channel: this.channel, tokenFile: this.tokenFile } : {}),
+      ...(on ? { channel: this.channel, tokenFile: this.tokenFile, ...(this.opts.approved ? { approved: this.opts.approved() } : {}) } : {}),
       app: this.opts.app,
     };
   }

@@ -449,3 +449,28 @@ export async function removeFromClient(o: SetupOptions, id: McatzpTargetId): Pro
   const removed = await claudeCli(c, `remove --scope user "${name}"`);
   if (removed.code !== 0) throw new Error(removed.output || 'claude mcp remove failed');
 }
+
+/** The four apps, by the folder each keeps its bridge.json in. */
+const CATS = [
+  { id: 'devcatz', name: 'DevCatz' },
+  { id: 'dbcatz', name: 'DBCatz' },
+  { id: 'dialcatz', name: 'DialCatz' },
+  { id: 'docatz', name: 'DoCatz' },
+] as const;
+
+export interface McatzpApproval {
+  id: (typeof CATS)[number]['id'];
+  name: string;
+  /** Who is approved there. Empty when its MCatzP is off, or it is a version that does not say. */
+  clients: string[];
+}
+
+/** Where each client is approved, from every app's bridge.json. Approvals stay per app: this only reads them. */
+export function approvalsAcrossApps(o: SetupOptions): McatzpApproval[] {
+  const c = ctx(o);
+  return CATS.map(({ id, name }) => {
+    const entry = readJson(join(appData(c), name, 'bridge.json'))?.mcatzp as { enabled?: unknown; approved?: unknown } | undefined;
+    const clients = entry?.enabled === true && Array.isArray(entry.approved) ? entry.approved.filter((x): x is string => typeof x === 'string') : [];
+    return { id, name, clients };
+  });
+}

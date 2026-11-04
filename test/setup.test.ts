@@ -4,7 +4,7 @@ import { createHash } from 'node:crypto';
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { delimiter, join } from 'node:path';
-import { addToClient, install, installPath, removeFromClient, setupState, targets } from '@catzoid/mcatzp-host';
+import { addToClient, approvalsAcrossApps, install, installPath, removeFromClient, setupState, targets } from '@catzoid/mcatzp-host';
 
 // macOS: `ditto`, a shell script as the "program".
 const root = mkdtempSync(join(tmpdir(), 'mcatzp-setup-'));
@@ -261,3 +261,24 @@ describe('Add to client', () => {
     expect((await targets(machine())).find((t) => t.id === 'claude-code')?.found).toBe(false);
   });
 });
+
+describe('where a client is approved', () => {
+  test('read from every app, nothing from an app that is off or does not say', () => {
+    const o = machine();
+    const write = (app: string, mcatzp: object) => {
+      const dir = join(o.home, 'Library', 'Application Support', app);
+      mkdirSync(dir, { recursive: true });
+      writeFileSync(join(dir, 'bridge.json'), JSON.stringify({ mcatzp }));
+    };
+    write('DevCatz', { enabled: true, approved: ['zcode', 'claude-code'] });
+    write('DBCatz', { enabled: false, approved: ['zcode'] });
+    write('DialCatz', { enabled: true });
+    expect(approvalsAcrossApps(o).map((a) => [a.name, a.clients])).toEqual([
+      ['DevCatz', ['zcode', 'claude-code']],
+      ['DBCatz', []],
+      ['DialCatz', []],
+      ['DoCatz', []],
+    ]);
+  });
+});
+

@@ -26,6 +26,8 @@ export interface BridgeEntry {
   channel?: string;
   /** File holding the session token (0600); only while enabled. */
   tokenFile?: string;
+  /** The clients approved in this app, by name, for the other Catzoid apps to show; only while enabled. */
+  approved?: string[];
   app: AppInfo;
 }
 
