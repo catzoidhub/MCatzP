@@ -28,6 +28,28 @@ MCatzP lets an AI assistant — Claude Code, ZCode, Claude Desktop, Cursor, Gemi
 speaks MCP — use the Catzoid apps on your computer. It runs locally over stdio; each app decides what it shares, and
 every change is confirmed in the app, not in the chat.
 
+## Uninstall
+
+Uninstalling a Catzoid app leaves MCatzP alone. First take it out of your clients, with **Remove** under Settings →
+MCatzP in any of the apps, or by hand (for Claude Code: `claude mcp remove mcatzp`). Then remove the program the way it
+came:
+
+```bash
+# Homebrew
+brew uninstall mcatzp
+
+# installed from an app, or moved there from the zip (macOS)
+rm -f "$HOME/.catzoid/bin/mcatzp"
+```
+
+```powershell
+# installed from an app, or moved there from the zip (Windows)
+Remove-Item -Force "$env:LOCALAPPDATA\Catzoid\bin\mcatzp.exe"
+```
+
+With `npx` there is nothing installed to remove. Every client's file:
+[catzoid.com/docs/mcatzp#uninstall](https://catzoid.com/docs/mcatzp#uninstall).
+
 ## How it works
 
 MCatzP finds the installed apps through their `bridge.json`, connects to a local channel each app opens only while
