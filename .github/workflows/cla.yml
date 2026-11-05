@@ -1,0 +1,36 @@
+# The contributor licence agreement (CLA.md, Catzoid #43): the first pull request of anyone but the maintainer asks
+# them to sign by leaving one comment; signatures are kept in signatures/cla.json on the cla-signatures branch.
+name: CLA
+
+on:
+  issue_comment:
+    types: [created]
+  pull_request_target:
+    types: [opened, closed, synchronize]
+
+permissions:
+  actions: write
+  contents: write
+  pull-requests: write
+  statuses: write
+
+jobs:
+  cla:
+    runs-on: ubuntu-latest
+    steps:
+      - name: CLA check
+        if: (github.event.comment.body == 'recheck' || github.event.comment.body == 'I have read the CLA Document and I hereby sign the CLA') || github.event_name == 'pull_request_target'
+        # contributor-assistant/github-action v2.6.1, pinned to its commit
+        uses: contributor-assistant/github-action@ca4a40a7d1004f18d9960b404b97e5f30a505a08
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          path-to-signatures: signatures/cla.json
+          path-to-document: https://github.com/catzoidhub/MCatzP/blob/main/CLA.md
+          branch: cla-signatures
+          allowlist: ryankucingg,sizoune,manusiakemos,*[bot]
+          custom-notsigned-prcomment: >
+            Thank you for your pull request — the cats are purring. Before it can be merged, please read the
+            [contributor licence agreement](https://github.com/catzoidhub/MCatzP/blob/main/CLA.md) and sign it by
+            leaving the comment below. You keep the copyright of your work, and you sign once for all your pull requests.
+          custom-allsigned-prcomment: All contributors have signed the CLA. Thank you! 🐾
