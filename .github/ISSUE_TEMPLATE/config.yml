@@ -1,0 +1,11 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Report a security problem
+    url: https://github.com/catzoidhub/MCatzP/security/advisories/new
+    about: Privately — please never in a public issue.
+  - name: Docs, FAQ and troubleshooting
+    url: https://catzoid.com/docs
+    about: Most questions are answered here.
+  - name: Community
+    url: https://catzoid.com/community
+    about: Talk with other people who use the Catzoid apps.

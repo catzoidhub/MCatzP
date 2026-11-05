@@ -1,0 +1,61 @@
+name: Bug report
+description: Something does not work the way it should.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: >
+        Thank you for reporting! Asking your assistant to call `mcatzp_status` first often shows what is wrong, and
+        [Troubleshooting](https://catzoid.com/docs/troubleshooting#mcatzp) explains its messages.
+        A security problem? Please do not report it here — use **Security → Report a vulnerability** instead.
+  - type: input
+    id: version
+    attributes:
+      label: MCatzP version
+      description: Settings → MCatzP in any cat shows it, or `mcatzp --version`.
+      placeholder: "1.0.1"
+    validations:
+      required: true
+  - type: input
+    id: client
+    attributes:
+      label: AI client
+      description: The client that starts MCatzP, and how it does (the program, Homebrew or npx).
+      placeholder: "Claude Code, npx"
+    validations:
+      required: true
+  - type: input
+    id: cat
+    attributes:
+      label: Which cat, and its version
+      placeholder: "DBCatz 1.1.0"
+  - type: input
+    id: system
+    attributes:
+      label: Computer
+      description: Operating system and chip.
+      placeholder: "macOS 15.4, Apple silicon"
+    validations:
+      required: true
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: And what you expected instead.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to make it happen again
+      placeholder: |
+        1. …
+        2. …
+        3. …
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: What mcatzp_status says, and any error message
+      description: Paste text as text. Remove anything secret first.

@@ -1,0 +1,27 @@
+name: Idea
+description: Something MCatzP could do, or do better.
+labels: [idea]
+body:
+  - type: markdown
+    attributes:
+      value: >
+        Ideas are welcome here. Big ones are talked through here before anyone builds them. A new tool usually belongs
+        in the cat that does the work, so say which cat you have in mind.
+  - type: textarea
+    id: problem
+    attributes:
+      label: What are you trying to do?
+      description: The job, not the solution yet — "I ask my assistant to check the same three things every morning".
+    validations:
+      required: true
+  - type: textarea
+    id: idea
+    attributes:
+      label: What would help
+    validations:
+      required: true
+  - type: textarea
+    id: else
+    attributes:
+      label: Anything else
+      description: How you get by today, which client you use.
