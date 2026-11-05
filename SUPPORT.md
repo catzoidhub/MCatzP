@@ -1,6 +1,6 @@
 # Support
 
-MCatzP is made by one person in Indonesia — Mahryan Rakhmatullah (Ryan N.R.) — and is free and open source. This page says honestly what
+MCatzP is made by one person in Indonesia — Mahryan Rakhmatullah (Ryan N.R.) — with two others helping, and is free and open source. This page says honestly what
 you can expect.
 
 ## Where to ask

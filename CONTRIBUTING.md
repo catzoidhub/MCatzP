@@ -1,6 +1,6 @@
 # Contributing to MCatzP
 
-Thank you for wanting to help — MCatzP is made by one person, and every fix, idea and bug report counts. This page
+Thank you for wanting to help — MCatzP is made by one person, with two others helping, and every fix, idea and bug report counts. This page
 says how to get a change merged without wasted work.
 
 ## Before you start
