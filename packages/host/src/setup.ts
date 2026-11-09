@@ -41,7 +41,7 @@ export interface McatzpInstallProgress {
   total: number;
 }
 
-export const MCATZP_TARGETS = ['claude-code', 'zcode', 'claude-desktop', 'cursor', 'windsurf', 'vscode', 'cline', 'gemini', 'codex', 'opencode', 'copilot', 'kiro', 'antigravity', 'qwen', 'lmstudio', 'roo', 'amp', 'warp'] as const;
+export const MCATZP_TARGETS = ['claude-code', 'zcode', 'claude-desktop', 'cursor', 'windsurf', 'vscode', 'cline', 'gemini', 'codex', 'opencode', 'copilot', 'kiro', 'antigravity', 'qwen', 'lmstudio', 'roo', 'amp', 'warp', 'zed'] as const;
 export type McatzpTargetId = (typeof MCATZP_TARGETS)[number];
 
 export interface McatzpTarget {
@@ -271,6 +271,18 @@ const readJson = (file: string): Record<string, unknown> | null => {
     return null;
   }
 };
+/** `// …` lines before the JSON, as Zed writes at the top of its settings; comments anywhere else are not read. */
+const splitLead = (text: string): [string, string] => {
+  const lead = text.match(/^(?:[ \t]*(?:\/\/[^\n]*)?\r?\n)*/)?.[0] ?? '';
+  return [lead, text.slice(lead.length)];
+};
+const readJsonLead = (file: string): Record<string, unknown> | null => {
+  try {
+    return JSON.parse(splitLead(readFileSync(file, 'utf8'))[1]) as Record<string, unknown>;
+  } catch {
+    return null;
+  }
+};
 const claudeFile = (c: Ctx) => join(c.home, '.claude.json');
 const codexFile = (c: Ctx) => join(c.home, '.codex', 'config.toml');
 /** Where desktop apps keep their settings. */
@@ -294,6 +306,8 @@ interface JsonClient {
   file: (c: Ctx) => string;
   key: string[];
   entry: (command: string) => Record<string, unknown>;
+  /** The file may open with `// …` lines, kept as they are. */
+  lead?: boolean;
 }
 const plain = (command: string) => ({ command, args: [], env: {} });
 const typed = (command: string) => ({ type: 'stdio', ...plain(command) });
@@ -356,6 +370,16 @@ const JSON_CLIENTS: JsonClient[] = [
     entry: plain,
   },
   { id: 'warp', label: 'Warp', found: (c) => existsSync(join(c.home, '.warp')) || (c.mac && existsSync('/Applications/Warp.app')), file: (c) => join(c.home, '.warp', '.mcp.json'), key: ['mcpServers'], entry: plain },
+  {
+    id: 'zed',
+    label: 'Zed',
+    found: (c) => existsSync(join(c.home, '.config', 'zed')) || onPath(c, 'zed') || onPath(c, 'zeditor') || (c.mac && existsSync('/Applications/Zed.app')),
+    // ~/.config/zed on macOS and Linux alike; %APPDATA%\Zed on Windows.
+    file: (c) => (c.win ? join(appData(c), 'Zed', 'settings.json') : join(c.home, '.config', 'zed', 'settings.json')),
+    key: ['context_servers'],
+    entry: plain,
+    lead: true,
+  },
   { id: 'gemini', label: 'Gemini CLI', found: (c) => existsSync(join(c.home, '.gemini')) || onPath(c, 'gemini'), file: (c) => join(c.home, '.gemini', 'settings.json'), key: ['mcpServers'], entry: plain },
 ];
 const dig = (conf: Record<string, unknown> | null, key: string[]): unknown => key.reduce<unknown>((at, k) => (at as Record<string, unknown> | undefined)?.[k], conf ?? undefined);
@@ -370,8 +394,9 @@ function replaceFile(file: string, text: string): void {
 }
 
 /** A client's JSON file with `change` applied to its servers; the rest of the file stays. */
-function editJson(file: string, key: string[], change: (servers: Record<string, unknown>) => void): void {
-  const conf = existsSync(file) ? readJson(file) : {};
+function editJson(file: string, key: string[], change: (servers: Record<string, unknown>) => void, lead = false): void {
+  const head = lead && existsSync(file) ? splitLead(readText(file))[0] : '';
+  const conf = existsSync(file) ? (lead ? readJsonLead(file) : readJson(file)) : {};
   // Never over a file that could not be read (comments too): what it holds would be lost.
   if (!conf) throw new Error(`Could not read ${file}: fix it or add MCatzP by hand`);
   let at: Record<string, unknown> = conf;
@@ -380,7 +405,7 @@ function editJson(file: string, key: string[], change: (servers: Record<string, 
     at = at[k] as Record<string, unknown>;
   }
   change(at);
-  replaceFile(file, `${JSON.stringify(conf, null, 2)}\n`);
+  replaceFile(file, `${head}${JSON.stringify(conf, null, 2)}\n`);
 }
 
 /** Codex keeps TOML: one [mcp_servers.<name>] table per server. Only that table, with its subtables, is touched. */
@@ -427,7 +452,7 @@ export async function targets(o: SetupOptions): Promise<McatzpTarget[]> {
   const account = (claude?.oauthAccount as { emailAddress?: unknown } | undefined)?.emailAddress;
   return [
     { ...row('claude-code', 'Claude Code', onPath(c, 'claude'), commandOf(claude?.mcpServers)), ...(typeof account === 'string' ? { account } : {}) },
-    ...JSON_CLIENTS.map((j) => row(j.id, j.label, j.found(c), commandOf(dig(readJson(j.file(c)), j.key)))),
+    ...JSON_CLIENTS.map((j) => row(j.id, j.label, j.found(c), commandOf(dig((j.lead ? readJsonLead : readJson)(j.file(c)), j.key)))),
     // The CLI, the IDE extension and the desktop app read the same file.
     row('codex', 'Codex', existsSync(join(c.home, '.codex')) || onPath(c, 'codex') || (c.mac && existsSync('/Applications/Codex.app')), codexTable(readText(codexFile(c)))?.command ?? null),
   ];
@@ -442,7 +467,7 @@ export async function addToClient(o: SetupOptions, id: McatzpTargetId): Promise<
   if (json) {
     editJson(json.file(c), json.key, (servers) => {
       servers[entryOf(servers)?.[0] ?? 'mcatzp'] = json.entry(path);
-    });
+    }, json.lead);
     return;
   }
   if (id === 'codex') {
@@ -469,7 +494,7 @@ export async function removeFromClient(o: SetupOptions, id: McatzpTargetId): Pro
     editJson(json.file(c), json.key, (servers) => {
       const name = entryOf(servers)?.[0];
       if (name) delete servers[name];
-    });
+    }, json.lead);
     return;
   }
   if (id === 'codex') {

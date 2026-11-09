@@ -6,8 +6,10 @@ import { tmpdir } from 'node:os';
 import { delimiter, join } from 'node:path';
 import { addToClient, approvalsAcrossApps, install, installPath, removeFromClient, setupState, targets } from '@catzoid/mcatzp-host';
 
-// Installing is tried on macOS only here: `zip`, `ditto` and a shell script as the "program". CI runs on Windows too.
+// Installing is tried on macOS (`ditto`) and Linux (MCatzP's own unzip), with `zip` and a shell script as the
+// "program"; not on Windows. CI runs all three.
 const mac = process.platform === 'darwin';
+const win = process.platform === 'win32';
 const root = mkdtempSync(join(tmpdir(), 'mcatzp-setup-'));
 afterAll(() => {
   server.stop(true);
@@ -26,7 +28,7 @@ function zipOf(name: string, files: Record<string, string>): string {
   return zip;
 }
 const program = (v: string) => `#!/bin/sh\necho ${v}\n`;
-const ZIPS: Record<string, { version: string; zip: string; sha?: string }> = !mac ? {} : {
+const ZIPS: Record<string, { version: string; zip: string; sha?: string }> = win ? {} : {
   good: { version: '1.0.0', zip: zipOf('good', { mcatzp: program('1.0.0') }) },
   newer: { version: '1.1.0', zip: zipOf('newer', { mcatzp: program('1.1.0') }) },
   badsum: { version: '1.0.0', zip: zipOf('badsum', { mcatzp: program('1.0.0') }), sha: 'a'.repeat(64) },
@@ -157,6 +159,32 @@ describe.skipIf(!mac)('Add to client', () => {
     await expect(addToClient(o, 'zcode')).rejects.toThrow('Could not read');
     expect(readFileSync(file, 'utf8')).toBe('{broken');
   });
+  test('Zed: its leading comments stay, the rest of its settings too', async () => {
+    const { o, bin } = await ready();
+    const file = join(o.home, '.config', 'zed', 'settings.json');
+    mkdirSync(join(o.home, '.config', 'zed'), { recursive: true });
+    const head = '// Zed settings\n//\n// See the docs.\n';
+    writeFileSync(file, `${head}{\n  "theme": "One Dark",\n  "context_servers": { "other": { "command": "/o" } }\n}\n`);
+    expect((await targets(o)).find((t) => t.id === 'zed')).toMatchObject({ found: true, command: null });
+    await addToClient(o, 'zed');
+    const text = readFileSync(file, 'utf8');
+    expect(text.startsWith(head)).toBe(true);
+    const conf = JSON.parse(text.slice(head.length));
+    expect(conf.theme).toBe('One Dark');
+    expect(conf.context_servers).toEqual({ other: { command: '/o' }, mcatzp: { command: bin, args: [], env: {} } });
+    expect((await targets(o)).find((t) => t.id === 'zed')?.current).toBe(true);
+    await removeFromClient(o, 'zed');
+    expect(Object.keys(JSON.parse(readFileSync(file, 'utf8').slice(head.length)).context_servers)).toEqual(['other']);
+  });
+  test('Zed: comments inside the settings are left alone', async () => {
+    const { o } = await ready();
+    const file = join(o.home, '.config', 'zed', 'settings.json');
+    mkdirSync(join(o.home, '.config', 'zed'), { recursive: true });
+    const text = '{\n  // my font\n  "buffer_font_size": 15\n}\n';
+    writeFileSync(file, text);
+    await expect(addToClient(o, 'zed')).rejects.toThrow('Could not read');
+    expect(readFileSync(file, 'utf8')).toBe(text);
+  });
   test('ZCode: no file yet', async () => {
     const { o, bin } = await ready();
     mkdirSync(join(o.home, '.zcode'), { recursive: true });
@@ -285,7 +313,7 @@ describe('where a client is approved', () => {
 });
 
 
-describe.skipIf(!mac)('Linux', () => {
+describe.skipIf(win)('Linux', () => {
   test('installs from the zip without unzip, stored or deflated', async () => {
     for (const [name, flags] of [['deflated', ['-qj']], ['stored', ['-qj0']]] as const) {
       const dir = join(root, 'zips', `linux-${name}`);

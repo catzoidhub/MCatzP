@@ -24,7 +24,18 @@ export interface Cat {
 export function appDataDir(name: string, env = process.env, platform = process.platform): string {
   if (platform === 'win32') return path.join(env.APPDATA ?? path.join(os.homedir(), 'AppData', 'Roaming'), name);
   if (platform === 'darwin') return path.join(os.homedir(), 'Library', 'Application Support', name);
-  return path.join(env.XDG_CONFIG_HOME ?? path.join(os.homedir(), '.config'), name);
+  return path.join(env.XDG_CONFIG_HOME || path.join(os.homedir(), '.config'), name);
+}
+
+/**
+ * Where an app's bridge.json may be. Linux: XDG_CONFIG_HOME, then ~/.config — a client in a sandbox (Flatpak) points
+ * XDG_CONFIG_HOME at its own folder even when it may read ~/.config, where the apps really are.
+ */
+export async function bridgeFileOf(name: string, env: NodeJS.ProcessEnv, platform = process.platform, home = os.homedir()): Promise<string> {
+  const first = path.join(appDataDir(name, env, platform), 'bridge.json');
+  if (platform !== 'linux' || !env.XDG_CONFIG_HOME) return first;
+  const fallback = path.join(home, '.config', name, 'bridge.json');
+  return (await exists(path.dirname(first))) || !(await exists(path.dirname(fallback))) ? first : fallback;
 }
 
 async function exists(p: string): Promise<boolean> {
@@ -58,7 +69,7 @@ async function readCat(id: string, name: string, bridgeFile: string): Promise<Ca
 export async function discover(env = process.env): Promise<Cat[]> {
   const cats: Promise<Cat>[] = [];
   if (env.MCATZP_NO_DEFAULT_APPS !== '1') {
-    for (const a of KNOWN_APPS) cats.push(readCat(a.id, a.name, path.join(appDataDir(a.name, env), 'bridge.json')));
+    for (const a of KNOWN_APPS) cats.push(bridgeFileOf(a.name, env).then((file) => readCat(a.id, a.name, file)));
   }
   for (const file of (env.MCATZP_BRIDGE_PATHS ?? '').split(path.delimiter).filter(Boolean)) {
     cats.push(

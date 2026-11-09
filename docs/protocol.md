@@ -21,6 +21,10 @@ Each app already keeps `bridge.json` in its data folder:
 | Windows | `%APPDATA%\<App>\bridge.json` |
 | Linux | `$XDG_CONFIG_HOME/<App>/bridge.json`, else `~/.config/<App>/bridge.json` |
 
+On Linux, when no app folder is under `XDG_CONFIG_HOME`, MCatzP also looks in `~/.config`: an MCP client installed as a
+Flatpak sets `XDG_CONFIG_HOME` to its sandbox's own folder. Such a client still needs to be allowed into `~/.config`, where
+the sockets are (e.g. `flatpak override --user --filesystem=xdg-config <id>`). Not tried yet.
+
 From 1.1.0 it carries an `mcatzp` entry next to whatever else the app writes there:
 
 ```json

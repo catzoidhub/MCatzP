@@ -23,7 +23,8 @@ claude mcp add mcatzp -- npx -y mcatzp
 
 Binaries for macOS (Apple silicon, Intel; signed and notarized), Windows (x64, not signed) and Linux (x64, arm64;
 glibc, not signed) are on
-[catzoid.com/mcatzp](https://catzoid.com/mcatzp).
+[catzoid.com/mcatzp](https://catzoid.com/mcatzp). On Linux, an AI client installed as a Flatpak may not reach the apps from its
+sandbox: see [docs/protocol.md](docs/protocol.md).
 
 MCatzP lets an AI assistant — Claude Code, ZCode, Claude Desktop, Cursor, Gemini CLI, Codex CLI or any client that
 speaks MCP — use the Catzoid apps on your computer. It runs locally over stdio; each app decides what it shares, and

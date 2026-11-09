@@ -7,7 +7,8 @@ jobs:
   test:
     strategy:
       matrix:
-        os: [macos-latest, windows-latest]
+        # Linux x64 is the one place linux-x64 runs before a release (the test VM is arm64).
+        os: [macos-latest, windows-latest, ubuntu-latest]
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v5
@@ -19,7 +20,7 @@ jobs:
       - run: bun run build
       - run: bun test
       # The release binary for this runner, end to end: on Windows this is the bun --compile binary over a real named
-      # pipe on real x64. Bun cannot extract a cross target on the Windows runner, so Bun's baseline build itself compiles
+      # pipe on real x64, on Linux over a Unix socket on real x64. Bun cannot extract a cross target on the Windows runner, so Bun's baseline build itself compiles
       # there, which gives the same runtime as scripts/release.mjs's bun-windows-x64-baseline target.
       - name: End to end on the compiled binary
         shell: bash
@@ -28,6 +29,11 @@ jobs:
             curl -fsSL -o bun-baseline.zip "https://github.com/oven-sh/bun/releases/download/bun-v$(bun --version)/bun-windows-x64-baseline.zip"
             unzip -q bun-baseline.zip -d bun-baseline
             compiler=bun-baseline/bun-windows-x64-baseline/bun.exe; bin=dist/ci/mcatzp.exe
+          elif [ "$RUNNER_OS" = "Linux" ]; then
+            # The same runtime as release.mjs's bun-linux-x64-baseline target.
+            curl -fsSL -o bun-baseline.zip "https://github.com/oven-sh/bun/releases/download/bun-v$(bun --version)/bun-linux-x64-baseline.zip"
+            unzip -q bun-baseline.zip -d bun-baseline
+            compiler=bun-baseline/bun-linux-x64-baseline/bun; bin=dist/ci/mcatzp
           else
             compiler=bun; bin=dist/ci/mcatzp
           fi

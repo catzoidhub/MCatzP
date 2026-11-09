@@ -1,13 +1,13 @@
 // A client that starts while the pairing dialog is open: its first tools/list must not settle for mcatzp_status,
 // because not every client reloads its tools after list_changed.
 import { afterEach, expect, test } from 'bun:test';
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import net from 'node:net';
 import os from 'node:os';
 import path from 'node:path';
 import { startFakecat } from '@catzoid/mcatzp-fakecat';
 import { PROTOCOL_VERSION } from '@catzoid/mcatzp-protocol';
-import { describeState, discover } from '../packages/server/src/discovery.js';
+import { bridgeFileOf, describeState, discover } from '../packages/server/src/discovery.js';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
 
@@ -97,4 +97,18 @@ test('a closed app is told apart from one with MCatzP off', async () => {
   expect(await say()).toBe('Fakecat is closed: open it to use its tools. MCatzP stays on in it.');
   await writeFile(file, JSON.stringify({ mcatzp: entry }));
   expect(await say()).toContain('MCatzP is off in it');
+});
+
+test('Linux: a sandboxed XDG_CONFIG_HOME falls back to ~/.config, where the apps are', async () => {
+  const home = await mkdtemp(path.join(os.tmpdir(), 'mcatzp-xdg-'));
+  clean.push(() => rm(home, { recursive: true, force: true }));
+  {
+    const sandbox = path.join(home, '.var', 'app', 'dev.zed.Zed', 'config');
+    const env = { XDG_CONFIG_HOME: sandbox };
+    expect(await bridgeFileOf('DoCatz', env, 'linux', home)).toBe(path.join(sandbox, 'DoCatz', 'bridge.json'));
+    await mkdir(path.join(home, '.config', 'DoCatz'), { recursive: true });
+    expect(await bridgeFileOf('DoCatz', env, 'linux', home)).toBe(path.join(home, '.config', 'DoCatz', 'bridge.json'));
+    await mkdir(path.join(sandbox, 'DoCatz'), { recursive: true });
+    expect(await bridgeFileOf('DoCatz', env, 'linux', home)).toBe(path.join(sandbox, 'DoCatz', 'bridge.json'));
+  }
 });
