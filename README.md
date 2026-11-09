@@ -11,22 +11,24 @@
 
 ## Install
 
-Settings → MCatzP in any of the four apps installs it and adds it to your AI client. Or:
+Settings → MCatzP in any of the four apps installs it and adds it to your AI client. Or, on macOS with Homebrew:
 
 ```bash
 brew install catzoidhub/catz/mcatzp
 ```
 
+Anywhere with Node.js (macOS, Windows, Linux):
+
 ```bash
 claude mcp add mcatzp -- npx -y mcatzp
 ```
 
-Binaries for macOS (Apple silicon, Intel; signed and notarized), Windows (x64, not signed) and Linux (x64, arm64;
-glibc, not signed) are on
-[catzoid.com/mcatzp](https://catzoid.com/mcatzp). On Linux, an AI client installed as a Flatpak may not reach the apps from its
-sandbox: see [docs/protocol.md](docs/protocol.md).
+Single binaries, no Node.js needed, on [catzoid.com/mcatzp](https://catzoid.com/mcatzp) and the
+[releases](https://github.com/catzoidhub/MCatzP/releases): macOS (Apple silicon, Intel; signed and notarized), Windows
+(x64, not signed) and Linux (x64, arm64; glibc, not signed). On Linux, an AI client installed as a Flatpak must be
+allowed into `~/.config` to reach the apps: see [docs/protocol.md](docs/protocol.md).
 
-MCatzP lets an AI assistant — Claude Code, ZCode, Claude Desktop, Cursor, Gemini CLI, Codex CLI or any client that
+MCatzP lets an AI assistant — Claude Code, ZCode, Claude Desktop, Cursor, Zed, Gemini CLI, Codex CLI or any client that
 speaks MCP — use the Catzoid apps on your computer. It runs locally over stdio; each app decides what it shares, and
 every change is confirmed in the app, not in the chat.
 
@@ -40,7 +42,7 @@ came:
 # Homebrew
 brew uninstall mcatzp
 
-# installed from an app, or moved there from the zip (macOS)
+# installed from an app, or moved there from the zip (macOS, Linux)
 rm -f "$HOME/.catzoid/bin/mcatzp"
 ```
 
