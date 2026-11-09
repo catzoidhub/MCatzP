@@ -19,6 +19,7 @@ Each app already keeps `bridge.json` in its data folder:
 | --- | --- |
 | macOS | `~/Library/Application Support/<App>/bridge.json` |
 | Windows | `%APPDATA%\<App>\bridge.json` |
+| Linux | `$XDG_CONFIG_HOME/<App>/bridge.json`, else `~/.config/<App>/bridge.json` |
 
 From 1.1.0 it carries an `mcatzp` entry next to whatever else the app writes there:
 
@@ -47,7 +48,7 @@ the MCP client when the list of tools changed.
 
 ## 2. The channel
 
-- **macOS:** a Unix socket `<data>/mcatzp.sock`, mode `0600`, created under umask `0177`.
+- **macOS and Linux:** a Unix socket `<data>/mcatzp.sock`, mode `0600`, created under umask `0177`.
 - **Windows:** a named pipe `\\.\pipe\catzoid-<app>-<random>`, created with Windows' default pipe DACL (only the
   creator, Administrators and SYSTEM can write). Never a TCP port, on any platform.
 - **Token:** 32 random bytes as hex in `<data>/mcatzp.token` (`0600`), new every time the switch goes on or the app

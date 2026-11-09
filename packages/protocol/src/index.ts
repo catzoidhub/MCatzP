@@ -15,7 +15,7 @@ export const KNOWN_APPS = [
 ] as const;
 
 export type Tier = 'read' | 'change' | 'destructive';
-export type Platform = 'darwin' | 'win32';
+export type Platform = 'darwin' | 'win32' | 'linux';
 
 /** The `mcatzp` entry an app writes into its bridge.json. Absent = the app is older than 1.1.0. */
 export interface BridgeEntry {

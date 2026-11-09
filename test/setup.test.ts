@@ -55,7 +55,7 @@ function machine(extra: { path?: string } = {}) {
 }
 const never = new AbortController().signal;
 const noop = () => {};
-const left = (o: ReturnType<typeof machine>) => readdirSync(join(o.home, '.catzoid', 'bin')).filter((f) => f.startsWith('.'));
+const left = (o: { home: string }) => readdirSync(join(o.home, '.catzoid', 'bin')).filter((f) => f.startsWith('.'));
 
 describe.skipIf(!mac)('the program', () => {
   test('no build for this computer', async () => {
@@ -284,3 +284,42 @@ describe('where a client is approved', () => {
   });
 });
 
+
+describe.skipIf(!mac)('Linux', () => {
+  test('installs from the zip without unzip, stored or deflated', async () => {
+    for (const [name, flags] of [['deflated', ['-qj']], ['stored', ['-qj0']]] as const) {
+      const dir = join(root, 'zips', `linux-${name}`);
+      mkdirSync(dir, { recursive: true });
+      writeFileSync(join(dir, 'mcatzp'), program('1.0.0'));
+      const zip = join(root, 'zips', `linux-${name}.zip`);
+      execFileSync('/usr/bin/zip', [...flags, zip, join(dir, 'mcatzp')]);
+      ZIPS[`linux-${name}`] = { version: '1.0.0', zip };
+      mode = `linux-${name}`;
+      // An empty PATH: nothing to unpack with but MCatzP's own reader.
+      const o = { ...machine({ path: '' }), platform: 'linux' as const, arch: 'arm64' };
+      await install(o, noop, never);
+      const path = join(o.home, '.catzoid', 'bin', 'mcatzp');
+      expect(statSync(path).mode & 0o111).not.toBe(0);
+      expect(await setupState(o)).toMatchObject({ path, version: '1.0.0', source: 'catzoid', latest: '1.0.0', noBuild: false });
+      expect(left(o)).toEqual([]);
+    }
+  });
+  test('no build for an architecture MCatzP has none for', async () => {
+    mode = 'good';
+    expect((await setupState({ ...machine(), platform: 'linux', arch: 'ia32' })).noBuild).toBe(true);
+  });
+});
+
+test('Linux: the apps keep bridge.json under XDG_CONFIG_HOME, else ~/.config', () => {
+  const o = { ...machine(), platform: 'linux' as const };
+  const write = (base: string) => {
+    mkdirSync(join(base, 'DoCatz'), { recursive: true });
+    writeFileSync(join(base, 'DoCatz', 'bridge.json'), JSON.stringify({ mcatzp: { enabled: true, approved: ['claude-code'] } }));
+  };
+  write(join(o.home, '.config'));
+  expect(approvalsAcrossApps(o).find((a) => a.id === 'docatz')?.clients).toEqual(['claude-code']);
+  const xdg = join(o.home, 'xdg');
+  expect(approvalsAcrossApps({ ...o, env: { ...o.env, XDG_CONFIG_HOME: xdg } }).find((a) => a.id === 'docatz')?.clients).toEqual([]);
+  write(xdg);
+  expect(approvalsAcrossApps({ ...o, env: { ...o.env, XDG_CONFIG_HOME: xdg } }).find((a) => a.id === 'docatz')?.clients).toEqual(['claude-code']);
+});

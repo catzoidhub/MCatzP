@@ -6,6 +6,7 @@ import { exec, execFile } from 'node:child_process';
 import { createHash, randomBytes } from 'node:crypto';
 import { chmodSync, copyFileSync, createWriteStream, existsSync, lstatSync, mkdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
+import { inflateRawSync } from 'node:zlib';
 import { delimiter, dirname, join } from 'node:path';
 import { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
@@ -62,7 +63,7 @@ const LOCK_STALE_MS = 10 * 60_000;
 
 const ctx = (o: SetupOptions) => {
   const platform = o.platform ?? process.platform;
-  return { win: platform === 'win32', mac: platform === 'darwin', arch: o.arch ?? process.arch, env: o.env ?? process.env, home: o.home ?? homedir() };
+  return { win: platform === 'win32', mac: platform === 'darwin', linux: platform === 'linux', arch: o.arch ?? process.arch, env: o.env ?? process.env, home: o.home ?? homedir() };
 };
 type Ctx = ReturnType<typeof ctx>;
 
@@ -73,8 +74,9 @@ export function installPath(o: SetupOptions): string {
 }
 
 /** The site's name for this computer; null when MCatzP has no build for it. */
-function platformName(c: Ctx): 'mac-arm64' | 'mac-x64' | 'win-x64' | null {
+function platformName(c: Ctx): 'mac-arm64' | 'mac-x64' | 'win-x64' | 'linux-arm64' | 'linux-x64' | null {
   if (c.mac) return c.arch === 'arm64' ? 'mac-arm64' : 'mac-x64';
+  if (c.linux) return c.arch === 'arm64' ? 'linux-arm64' : c.arch === 'x64' ? 'linux-x64' : null;
   return c.win && c.arch === 'x64' ? 'win-x64' : null;
 }
 
@@ -186,6 +188,36 @@ function takeLock(dir: string): () => void {
   return () => rmSync(lock, { recursive: true, force: true });
 }
 
+/** The files of a zip with plain names (stored or deflated), written into `dir`: what the release zips hold. */
+function unzipOne(archive: string, dir: string): { code: number; stderr: string } {
+  try {
+    const zip = readFileSync(archive);
+    const eocd = zip.lastIndexOf(Buffer.from([0x50, 0x4b, 0x05, 0x06]));
+    if (eocd < 0) throw new Error('not a zip');
+    let at = zip.readUInt32LE(eocd + 16);
+    for (let n = zip.readUInt16LE(eocd + 10); n > 0; n--) {
+      if (zip.readUInt32LE(at) !== 0x02014b50) throw new Error('broken zip');
+      const method = zip.readUInt16LE(at + 10);
+      const packed = zip.readUInt32LE(at + 20);
+      const size = zip.readUInt32LE(at + 24);
+      const nameLen = zip.readUInt16LE(at + 28);
+      const local = zip.readUInt32LE(at + 42);
+      const name = zip.toString('utf8', at + 46, at + 46 + nameLen);
+      at += 46 + nameLen + zip.readUInt16LE(at + 30) + zip.readUInt16LE(at + 32);
+      if (name.endsWith('/')) continue;
+      if (/[\\/]|^\./.test(name)) throw new Error(`unexpected entry ${name}`);
+      const start = local + 30 + zip.readUInt16LE(local + 26) + zip.readUInt16LE(local + 28);
+      const body = zip.subarray(start, start + packed);
+      const out = method === 0 ? body : method === 8 ? inflateRawSync(body) : null;
+      if (!out || out.length !== size) throw new Error(`cannot read ${name}`);
+      writeFileSync(join(dir, name), out);
+    }
+    return { code: 0, stderr: '' };
+  } catch (e) {
+    return { code: 1, stderr: (e as Error).message };
+  }
+}
+
 /** Downloads, checks and installs the build for this computer, at the shared path. */
 export async function install(o: SetupOptions, progress: (p: McatzpInstallProgress) => void, signal: AbortSignal): Promise<void> {
   const c = ctx(o);
@@ -204,7 +236,8 @@ export async function install(o: SetupOptions, progress: (p: McatzpInstallProgre
     mkdirSync(unpacked);
     // Windows 10+ ships bsdtar as tar.exe, which unpacks zips.
     const tar = join(c.env.SystemRoot ?? 'C:\\Windows', 'System32', 'tar.exe');
-    const { code, stderr } = c.win ? await run(c, tar, ['-xf', archive, '-C', unpacked], 120_000) : await run(c, '/usr/bin/ditto', ['-x', '-k', archive, unpacked], 120_000);
+    // Linux: unzip is not on every system, and the zip holds one file, so it is read here.
+    const { code, stderr } = c.linux ? unzipOne(archive, unpacked) : c.win ? await run(c, tar, ['-xf', archive, '-C', unpacked], 120_000) : await run(c, '/usr/bin/ditto', ['-x', '-k', archive, unpacked], 120_000);
     if (code !== 0) throw new Error(`Could not unpack MCatzP: ${stderr.trim()}`);
     const built = join(unpacked, c.win ? 'mcatzp.exe' : 'mcatzp');
     if (!existsSync(built) || !lstatSync(built).isFile()) throw new Error('The download holds no MCatzP program');
@@ -241,7 +274,8 @@ const readJson = (file: string): Record<string, unknown> | null => {
 const claudeFile = (c: Ctx) => join(c.home, '.claude.json');
 const codexFile = (c: Ctx) => join(c.home, '.codex', 'config.toml');
 /** Where desktop apps keep their settings. */
-const appData = (c: Ctx) => (c.win ? (c.env.APPDATA ?? join(c.home, 'AppData', 'Roaming')) : join(c.home, 'Library', 'Application Support'));
+const appData = (c: Ctx) =>
+  c.win ? (c.env.APPDATA ?? join(c.home, 'AppData', 'Roaming')) : c.linux ? (c.env.XDG_CONFIG_HOME || join(c.home, '.config')) : join(c.home, 'Library', 'Application Support');
 const vscodeUser = (c: Ctx) => join(appData(c), 'Code', 'User');
 const ampDir = (c: Ctx) => (c.win ? join(appData(c), 'amp') : join(c.home, '.config', 'amp'));
 const onPath = (c: Ctx, name: string) => pathDirs(c).some((d) => [name, `${name}.exe`, `${name}.cmd`].some((n) => existsSync(join(d, n))));

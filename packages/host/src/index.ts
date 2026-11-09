@@ -112,7 +112,7 @@ export class McatzpHost {
   private readonly platform: Platform;
 
   constructor(private readonly opts: HostOptions) {
-    this.platform = opts.platform ?? (process.platform === 'win32' ? 'win32' : 'darwin');
+    this.platform = opts.platform ?? (process.platform === 'win32' || process.platform === 'linux' ? process.platform : 'darwin');
   }
 
   get running(): boolean {

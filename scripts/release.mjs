@@ -1,10 +1,11 @@
 #!/usr/bin/env bun
-// MCatzP's release files (MCatzP TODO #24, #25): one binary per computer, each alone at the root of its zip.
+// MCatzP's release files (MCatzP TODO #24, #25, #27): one binary per computer, each alone at the root of its zip.
 //   bun run release              build, sign, notarize, zip, sum into dist/release/ — nothing leaves except to Apple
 //   bun run release --no-notarize  signed only, for a quick local test
 //   bun run release --upload     also put them on the GitHub release v<version> (a draft if there is none yet)
 // The asset names are a contract: the apps' Install MCatzP and the Catzoid API (catalog.go, Catzoid #86) depend on them.
 // Windows: unsigned, the family rule since 2026-11-01 (the SignPath Foundation took no new projects; Catzoid #16).
+// Linux: unsigned, as Linux programs are.
 
 import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
@@ -29,6 +30,9 @@ const targets = [
   { id: 'mac-arm64', bun: 'bun-darwin-arm64', bin: 'mcatzp', mac: true, arch: 'arm64' },
   { id: 'mac-x64', bun: 'bun-darwin-x64-baseline', bin: 'mcatzp', mac: true, arch: 'x86_64' },
   { id: 'win-x64', bun: 'bun-windows-x64-baseline', bin: 'mcatzp.exe', mac: false },
+  // Linux: glibc builds (Bun's default), as the Linux apps need; arm64 has no baseline variant.
+  { id: 'linux-x64', bun: 'bun-linux-x64-baseline', bin: 'mcatzp', mac: false },
+  { id: 'linux-arm64', bun: 'bun-linux-arm64', bin: 'mcatzp', mac: false },
 ];
 
 function run(cmd, argv, opts = {}) {

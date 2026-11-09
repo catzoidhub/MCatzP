@@ -21,7 +21,8 @@ brew install catzoidhub/catz/mcatzp
 claude mcp add mcatzp -- npx -y mcatzp
 ```
 
-Binaries for macOS (Apple silicon, Intel; signed and notarized) and Windows (x64, not signed) are on
+Binaries for macOS (Apple silicon, Intel; signed and notarized), Windows (x64, not signed) and Linux (x64, arm64;
+glibc, not signed) are on
 [catzoid.com/mcatzp](https://catzoid.com/mcatzp).
 
 MCatzP lets an AI assistant — Claude Code, ZCode, Claude Desktop, Cursor, Gemini CLI, Codex CLI or any client that
