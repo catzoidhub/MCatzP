@@ -1,7 +1,7 @@
 {
   "name": "mcatzp",
-  "version": "1.0.2",
-  "description": "MCatzP \u2014 the MCP with the cats inside: one MCP server for every Catzoid app (DevCatz, DBCatz, DialCatz, DoCatz).",
+  "version": "1.0.3",
+  "description": "MCatzP — the MCP with the cats inside: one MCP server for every Catzoid app (DevCatz, DBCatz, DialCatz, DoCatz).",
   "license": "Apache-2.0",
   "homepage": "https://catzoid.com/mcatzp",
   "repository": {
@@ -27,6 +27,7 @@
     "compile": "bun build src/index.ts --compile --outfile dist/bin/mcatzp"
   },
   "dependencies": {
+    "@catzoid/mcatzp-host": "workspace:*",
     "@catzoid/mcatzp-protocol": "workspace:*",
     "@modelcontextprotocol/sdk": "^1.32.0"
   }

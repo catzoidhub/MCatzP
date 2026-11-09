@@ -4,7 +4,7 @@ import { createHash } from 'node:crypto';
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { delimiter, join } from 'node:path';
-import { addToClient, approvalsAcrossApps, install, installPath, removeFromClient, setupState, targets } from '@catzoid/mcatzp-host';
+import { addToClient, approvalsAcrossApps, install, installPath, removeFromClient, setupState, targets, uninstall } from '@catzoid/mcatzp-host';
 
 // Installing is tried on macOS (`ditto`) and Linux (MCatzP's own unzip), with `zip` and a shell script as the
 // "program"; not on Windows. CI runs all three.
@@ -150,6 +150,30 @@ describe.skipIf(!mac)('Add to client', () => {
     expect((await targets(o)).find((t) => t.id === 'zcode')?.current).toBe(true);
     await removeFromClient(o, 'zcode');
     expect(Object.keys(JSON.parse(readFileSync(file, 'utf8')).mcp.servers)).toEqual(['keep']);
+  });
+  test('Uninstall: our entries leave, others stay, the shared copy and its empty folder go', async () => {
+    const { o, bin } = await ready();
+    const zcode = join(o.home, '.zcode', 'cli', 'config.json');
+    mkdirSync(join(o.home, '.zcode', 'cli'), { recursive: true });
+    writeFileSync(zcode, JSON.stringify({ mcp: { servers: { keep: { command: '/k' } } } }));
+    await addToClient(o, 'zcode');
+    const zed = join(o.home, '.config', 'zed', 'settings.json');
+    mkdirSync(join(o.home, '.config', 'zed'), { recursive: true });
+    writeFileSync(zed, JSON.stringify({ context_servers: { mcatzp: { command: 'npx', args: ['-y', 'mcatzp'] } } }));
+    expect(await uninstall(o)).toEqual({ removedFrom: ['zcode'], failed: [], binary: 'removed', keptPath: null });
+    expect(Object.keys(JSON.parse(readFileSync(zcode, 'utf8')).mcp.servers)).toEqual(['keep']);
+    expect(JSON.parse(readFileSync(zed, 'utf8')).context_servers.mcatzp.command).toBe('npx');
+    expect(existsSync(bin)).toBe(false);
+    expect(existsSync(join(o.home, '.catzoid', 'bin'))).toBe(false);
+    expect(await uninstall(o)).toEqual({ removedFrom: [], failed: [], binary: 'none', keptPath: null });
+  });
+  test('Uninstall: a copy on the PATH is kept, and named', async () => {
+    const bin = mkdtempSync(join(tmpdir(), 'mcatzp-path-'));
+    writeFileSync(join(bin, 'mcatzp'), program('0.9.0'));
+    chmodSync(join(bin, 'mcatzp'), 0o755);
+    const o = machine({ path: `${bin}${delimiter}/usr/bin:/bin` });
+    expect(await uninstall(o)).toMatchObject({ binary: 'kept', keptPath: join(bin, 'mcatzp') });
+    expect(existsSync(join(bin, 'mcatzp'))).toBe(true);
   });
   test('ZCode: an unreadable file is left alone', async () => {
     const { o } = await ready();

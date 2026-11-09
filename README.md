@@ -34,9 +34,22 @@ every change is confirmed in the app, not in the chat.
 
 ## Uninstall
 
-Uninstalling a Catzoid app leaves MCatzP alone. First take it out of your clients, with **Remove** under Settings →
-MCatzP in any of the apps, or by hand (for Claude Code: `claude mcp remove mcatzp`). Then remove the program the way it
-came:
+Uninstalling a Catzoid app leaves MCatzP alone. **Uninstall MCatzP** under Settings → MCatzP in any of the apps (1.1.0
+or later) does it all at once, and so does this, run from a terminal:
+
+```bash
+~/.catzoid/bin/mcatzp uninstall
+```
+
+```powershell
+& "$env:LOCALAPPDATA\Catzoid\bin\mcatzp.exe" uninstall
+```
+
+Both take MCatzP out of every client whose entry runs the copy in use, then remove the copy the apps installed. A copy
+from Homebrew or npm is kept and named, and an entry you added yourself (such as `npx -y mcatzp`) is left alone.
+
+By hand: take it out of your clients, with **Remove** under Settings → MCatzP, or for Claude Code with
+`claude mcp remove mcatzp`. Then remove the program the way it came:
 
 ```bash
 # Homebrew

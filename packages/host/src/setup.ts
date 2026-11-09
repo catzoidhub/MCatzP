@@ -4,7 +4,7 @@
 
 import { exec, execFile } from 'node:child_process';
 import { createHash, randomBytes } from 'node:crypto';
-import { chmodSync, copyFileSync, createWriteStream, existsSync, lstatSync, mkdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { chmodSync, copyFileSync, createWriteStream, existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, renameSync, rmdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { inflateRawSync } from 'node:zlib';
 import { delimiter, dirname, join } from 'node:path';
@@ -507,6 +507,58 @@ export async function removeFromClient(o: SetupOptions, id: McatzpTargetId): Pro
   if (!name) return;
   const removed = await claudeCli(c, `remove --scope user "${name}"`);
   if (removed.code !== 0) throw new Error(removed.output || 'claude mcp remove failed');
+}
+
+export interface McatzpUninstall {
+  /** The clients whose entry ran the copy in use, and no longer has one. */
+  removedFrom: McatzpTargetId[];
+  /** Clients whose entry could not be removed, and why. */
+  failed: { id: McatzpTargetId; error: string }[];
+  /** `kept`: a Homebrew, npm or other copy, which goes away its own way; `none`: there was no copy. */
+  binary: 'removed' | 'kept' | 'none';
+  keptPath: string | null;
+}
+
+/**
+ * Uninstall MCatzP, the same from every app and from `mcatzp uninstall`: the entries that run the copy in use leave
+ * their clients, then the shared copy goes (and its bin folder, once empty). A copy Homebrew or npm put somewhere else
+ * is theirs to remove: it is kept, and its path returned. Entries running something else (npx) are not ours: kept.
+ * Each app's own switch and approvals stay in its settings.
+ */
+export async function uninstall(o: SetupOptions): Promise<McatzpUninstall> {
+  const c = ctx(o);
+  const found = await findInstalled(o);
+  const removedFrom: McatzpTargetId[] = [];
+  const failed: McatzpUninstall['failed'] = [];
+  for (const t of await targets(o)) {
+    if (!t.current) continue;
+    try {
+      await removeFromClient(o, t.id);
+      removedFrom.push(t.id);
+    } catch (e) {
+      failed.push({ id: t.id, error: (e as Error).message });
+    }
+  }
+  if (!found.path) return { removedFrom, failed, binary: 'none', keptPath: null };
+  if (found.source !== 'catzoid') return { removedFrom, failed, binary: 'kept', keptPath: found.path };
+  const target = installPath(o);
+  const dir = dirname(target);
+  const release = takeLock(dir);
+  try {
+    rmSync(target, { force: true });
+  } catch (e) {
+    // Windows keeps a running .exe locked.
+    if (c.win) throw new Error('MCatzP is in use: close the AI assistant using it, then try again');
+    throw e;
+  } finally {
+    release();
+  }
+  try {
+    if (readdirSync(dir).length === 0) rmdirSync(dir);
+  } catch {
+    // Something else is there, or it is gone already: either way the folder stays as it is.
+  }
+  return { removedFrom, failed, binary: 'removed', keptPath: null };
 }
 
 /** The four apps, by the folder each keeps its bridge.json in. */
