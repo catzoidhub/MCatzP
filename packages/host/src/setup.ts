@@ -290,6 +290,31 @@ const codexFile = (c: Ctx) => join(c.home, '.codex', 'config.toml');
 const appData = (c: Ctx) =>
   c.win ? (c.env.APPDATA ?? join(c.home, 'AppData', 'Roaming')) : c.linux ? (c.env.XDG_CONFIG_HOME || join(c.home, '.config')) : join(c.home, 'Library', 'Application Support');
 const vscodeUser = (c: Ctx) => join(appData(c), 'Code', 'User');
+/**
+ * Claude Desktop's folder. The Microsoft Store build (MSIX `Claude_<publisher>`) keeps its data in
+ * %LOCALAPPDATA%\Claude-Data\claude_<publisher>\ and leaves only a marker in %APPDATA%\Claude (MCatzP #30): the
+ * folder there that holds claude_desktop_config.json or config.json, newest first; else the classic %APPDATA%\Claude.
+ */
+const claudeDesktopDir = (c: Ctx): string => {
+  const classic = join(appData(c), 'Claude');
+  if (!c.win) return classic;
+  const root = join(c.env.LOCALAPPDATA ?? join(c.home, 'AppData', 'Local'), 'Claude-Data');
+  try {
+    const store = readdirSync(root, { withFileTypes: true })
+      .filter((d) => d.isDirectory() && /^claude_/i.test(d.name))
+      .map((d) => join(root, d.name))
+      .map((dir) => {
+        const has = ['claude_desktop_config.json', 'config.json'].map((f) => join(dir, f)).filter((f) => existsSync(f));
+        return { dir, at: has.length ? Math.max(...has.map((f) => statSync(f).mtimeMs)) : -1 };
+      })
+      .filter((x) => x.at >= 0)
+      .sort((a, b) => b.at - a.at);
+    if (store[0]) return store[0].dir;
+  } catch {
+    /* no Store build */
+  }
+  return classic;
+};
 const ampDir = (c: Ctx) => (c.win ? join(appData(c), 'amp') : join(c.home, '.config', 'amp'));
 const onPath = (c: Ctx, name: string) => pathDirs(c).some((d) => [name, `${name}.exe`, `${name}.cmd`].some((n) => existsSync(join(d, n))));
 
@@ -314,7 +339,7 @@ const plain = (command: string) => ({ command, args: [], env: {} });
 const typed = (command: string) => ({ type: 'stdio', ...plain(command) });
 const JSON_CLIENTS: JsonClient[] = [
   { id: 'zcode', label: 'ZCode', found: (c) => existsSync(join(c.home, '.zcode')), file: (c) => join(c.home, '.zcode', 'cli', 'config.json'), key: ['mcp', 'servers'], entry: typed },
-  { id: 'claude-desktop', label: 'Claude Desktop', found: (c) => existsSync(join(appData(c), 'Claude')), file: (c) => join(appData(c), 'Claude', 'claude_desktop_config.json'), key: ['mcpServers'], entry: plain },
+  { id: 'claude-desktop', label: 'Claude Desktop', found: (c) => existsSync(claudeDesktopDir(c)), file: (c) => join(claudeDesktopDir(c), 'claude_desktop_config.json'), key: ['mcpServers'], entry: plain },
   { id: 'cursor', label: 'Cursor', found: (c) => existsSync(join(c.home, '.cursor')), file: (c) => join(c.home, '.cursor', 'mcp.json'), key: ['mcpServers'], entry: plain },
   { id: 'windsurf', label: 'Windsurf', found: (c) => existsSync(join(c.home, '.codeium', 'windsurf')), file: (c) => join(c.home, '.codeium', 'windsurf', 'mcp_config.json'), key: ['mcpServers'], entry: plain },
   { id: 'vscode', label: 'VS Code', found: (c) => existsSync(vscodeUser(c)), file: (c) => join(vscodeUser(c), 'mcp.json'), key: ['servers'], entry: typed },

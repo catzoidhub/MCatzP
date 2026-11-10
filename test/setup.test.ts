@@ -323,6 +323,25 @@ test('Windows path', () => {
   expect(installPath({ site: '', platform: 'win32', home: 'H', env: { LOCALAPPDATA: 'L' } })).toBe(join('L', 'Catzoid', 'bin', 'mcatzp.exe'));
 });
 
+test('Windows: Claude Desktop from the Store keeps its config in %LOCALAPPDATA%\\Claude-Data (#30)', async () => {
+  const home = join(root, `home${n++}`);
+  const o = { site: '', platform: 'win32' as const, home, env: { APPDATA: join(home, 'Roaming'), LOCALAPPDATA: join(home, 'Local'), PATH: '' } };
+  const row = async () => (await targets(o)).find((t) => t.id === 'claude-desktop')!;
+  expect((await row()).found).toBe(false);
+  // Only the marker the Store build leaves in %APPDATA%\Claude: the classic folder counts as found, as before.
+  mkdirSync(join(home, 'Roaming', 'Claude'), { recursive: true });
+  expect((await row()).found).toBe(true);
+  // A Store folder without config is not the one; the newest with config.json / claude_desktop_config.json is.
+  const data = join(home, 'Local', 'Claude-Data');
+  mkdirSync(join(data, 'claude_empty'), { recursive: true });
+  mkdirSync(join(data, 'claude_pzs8sxrjxfjjc'), { recursive: true });
+  writeFileSync(join(data, 'claude_pzs8sxrjxfjjc', 'config.json'), '{}');
+  writeFileSync(join(data, 'claude_pzs8sxrjxfjjc', 'claude_desktop_config.json'), JSON.stringify({ mcpServers: { mcatzp: { command: installPath(o) } } }));
+  expect(await row()).toMatchObject({ found: true, command: installPath(o) });
+  rmSync(join(data, 'claude_pzs8sxrjxfjjc'), { recursive: true });
+  expect((await row()).command).toBe(null);
+});
+
 describe('where a client is approved', () => {
   test('read from every app, nothing from an app that is off or does not say', () => {
     const o = machine();
