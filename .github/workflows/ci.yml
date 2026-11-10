@@ -3,6 +3,8 @@ on:
   push:
     branches: [main, 'feature/**']
   pull_request:
+  # Run it again by hand when GitHub itself failed to start the jobs.
+  workflow_dispatch:
 jobs:
   test:
     strategy:

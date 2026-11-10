@@ -34,8 +34,8 @@ every change is confirmed in the app, not in the chat.
 
 ## Uninstall
 
-Uninstalling a Catzoid app leaves MCatzP alone. **Uninstall MCatzP** under Settings → MCatzP in any of the apps (1.1.0
-or later) does it all at once, and so does this, run from a terminal:
+Uninstalling a Catzoid app leaves MCatzP alone. **Uninstall MCatzP** under Settings → MCatzP in an up-to-date app
+does it all at once, and so does this, run from a terminal:
 
 ```bash
 ~/.catzoid/bin/mcatzp uninstall
