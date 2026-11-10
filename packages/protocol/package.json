@@ -1,6 +1,6 @@
 {
   "name": "@catzoid/mcatzp-protocol",
-  "version": "1.0.4",
+  "version": "1.0.5",
   "description": "The wire protocol between MCatzP and the Catzoid apps: types, constants and helpers.",
   "license": "Apache-2.0",
   "type": "module",
