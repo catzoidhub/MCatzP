@@ -5,32 +5,24 @@ import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { createMcatzpServer } from './server.js';
 import { VERSION } from './version.js';
 
-/** The same as Uninstall MCatzP in an app's Settings, for someone with no Catzoid app at hand. */
+/** The same as Uninstall MCatzP in an app's Settings, for someone with no Catzoid app at hand. Plain ASCII: a Windows console shows no arrows. */
 async function uninstallHere(): Promise<void> {
   const { installPath, uninstall } = await import('@catzoid/mcatzp-host/setup');
   const o = { site: 'https://catzoid.com' };
-  const self = installPath(o);
   let r: Awaited<ReturnType<typeof uninstall>>;
   try {
     r = await uninstall(o);
   } catch (e) {
-    // Windows cannot delete the running .exe: this is that .exe, so it is deleted once this process has ended.
-    if (process.platform !== 'win32' || process.execPath.toLowerCase() !== self.toLowerCase() || !(e as Error).message.includes('in use')) {
-      console.error((e as Error).message);
-      process.exit(1);
-    }
-    const { spawn } = await import('node:child_process');
-    const { dirname } = await import('node:path');
-    spawn('cmd.exe', ['/d', '/c', `ping -n 3 127.0.0.1 >nul & del /f /q "${self}" & rmdir "${dirname(self)}"`], { detached: true, stdio: 'ignore', windowsHide: true }).unref();
-    r = { removedFrom: [], failed: [], binary: 'removed', keptPath: null };
-    console.log('MCatzP was taken out of your AI assistants.');
+    console.error((e as Error).message);
+    process.exit(1);
   }
   for (const id of r.removedFrom) console.log(`Removed from ${id}.`);
   for (const f of r.failed) console.error(`Could not remove it from ${f.id}: ${f.error}`);
-  if (r.binary === 'removed') console.log(`Removed ${self}.`);
-  if (r.binary === 'kept') console.log(`Kept ${r.keptPath}: remove it the way it was installed (brew uninstall mcatzp, npm uninstall -g mcatzp).`);
+  if (r.binary === 'removed' && !r.movedAside) console.log(`Removed ${installPath(o)}.`);
+  if (r.movedAside) console.log(`Removed it from the bin folder: it is still running, so it waits in ${r.movedAside}; that file goes once it has stopped.`);
+  if (r.binary === 'kept') console.log(`Kept ${r.keptPath}: remove it the way it was installed${r.removeCommand ? ` (${r.removeCommand})` : ''}.`);
   if (r.binary === 'none' && !r.removedFrom.length) console.log('MCatzP is not installed by a Catzoid app here, and no AI assistant runs it.');
-  console.log('Each app keeps its own MCatzP switch: turn it off in Settings → MCatzP.');
+  console.log('Each app keeps its own MCatzP switch: turn it off in Settings > MCatzP.');
   if (r.failed.length) process.exit(1);
 }
 

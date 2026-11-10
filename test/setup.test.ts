@@ -160,20 +160,27 @@ describe.skipIf(!mac)('Add to client', () => {
     const zed = join(o.home, '.config', 'zed', 'settings.json');
     mkdirSync(join(o.home, '.config', 'zed'), { recursive: true });
     writeFileSync(zed, JSON.stringify({ context_servers: { mcatzp: { command: 'npx', args: ['-y', 'mcatzp'] } } }));
-    expect(await uninstall(o)).toEqual({ removedFrom: ['zcode'], failed: [], binary: 'removed', keptPath: null });
+    expect(await uninstall(o)).toEqual({ removedFrom: ['zcode'], failed: [], binary: 'removed', keptPath: null, removeCommand: null, movedAside: null });
     expect(Object.keys(JSON.parse(readFileSync(zcode, 'utf8')).mcp.servers)).toEqual(['keep']);
     expect(JSON.parse(readFileSync(zed, 'utf8')).context_servers.mcatzp.command).toBe('npx');
     expect(existsSync(bin)).toBe(false);
     expect(existsSync(join(o.home, '.catzoid', 'bin'))).toBe(false);
-    expect(await uninstall(o)).toEqual({ removedFrom: [], failed: [], binary: 'none', keptPath: null });
+    expect(await uninstall(o)).toEqual({ removedFrom: [], failed: [], binary: 'none', keptPath: null, removeCommand: null, movedAside: null });
   });
   test('Uninstall: a copy on the PATH is kept, and named', async () => {
     const bin = mkdtempSync(join(tmpdir(), 'mcatzp-path-'));
     writeFileSync(join(bin, 'mcatzp'), program('0.9.0'));
     chmodSync(join(bin, 'mcatzp'), 0o755);
     const o = machine({ path: `${bin}${delimiter}/usr/bin:/bin` });
-    expect(await uninstall(o)).toMatchObject({ binary: 'kept', keptPath: join(bin, 'mcatzp') });
+    expect(await uninstall(o)).toMatchObject({ binary: 'kept', keptPath: join(bin, 'mcatzp'), removeCommand: null });
     expect(existsSync(join(bin, 'mcatzp'))).toBe(true);
+  });
+  test('Uninstall: an npm copy is named with its remove command', async () => {
+    const bin = join(mkdtempSync(join(tmpdir(), 'mcatzp-npm-')), 'lib', 'node_modules', '.bin');
+    mkdirSync(bin, { recursive: true });
+    writeFileSync(join(bin, 'mcatzp'), program('0.9.0'));
+    chmodSync(join(bin, 'mcatzp'), 0o755);
+    expect(await uninstall(machine({ path: `${bin}${delimiter}/usr/bin:/bin` }))).toMatchObject({ binary: 'kept', removeCommand: 'npm uninstall -g mcatzp' });
   });
   test('ZCode: an unreadable file is left alone', async () => {
     const { o } = await ready();

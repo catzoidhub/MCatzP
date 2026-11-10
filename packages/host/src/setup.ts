@@ -225,6 +225,7 @@ export async function install(o: SetupOptions, progress: (p: McatzpInstallProgre
   const l = platform ? await latest(o.site, platform) : null;
   if (!platform || !l) throw new Error('MCatzP has no build for this computer yet');
   const target = installPath(o);
+  sweepAside(c);
   const release = takeLock(dirname(target));
   const tmp = join(dirname(target), `.install-${randomBytes(4).toString('hex')}`);
   mkdirSync(tmp, { recursive: true });
@@ -517,16 +518,46 @@ export interface McatzpUninstall {
   /** `kept`: a Homebrew, npm or other copy, which goes away its own way; `none`: there was no copy. */
   binary: 'removed' | 'kept' | 'none';
   keptPath: string | null;
+  /** The command that removes a kept copy (`brew uninstall mcatzp`, `npm uninstall -g mcatzp`); null when not known. */
+  removeCommand: string | null;
+  /**
+   * Windows: the copy was running (an AI assistant had it open), so it was moved out of the bin folder into the temp
+   * folder instead; it is deleted once it has stopped, by the next install or uninstall, or by Windows' own cleanup.
+   */
+  movedAside: string | null;
+}
+
+/** How a copy that is not ours was installed, from where it is. */
+function removeCommandOf(source: McatzpSetup['source'], path: string): string | null {
+  if (source === 'homebrew') return 'brew uninstall mcatzp';
+  const p = path.replace(/\\/g, '/').toLowerCase();
+  if (p.includes('/.bun/')) return 'bun remove -g mcatzp';
+  if (p.includes('/node_modules/') || p.includes('/npm/') || p.includes('/.npm-global/') || p.includes('/nodejs/')) return 'npm uninstall -g mcatzp';
+  return null;
+}
+
+const ASIDE = /^mcatzp-[0-9a-f]{8}\.exe\.old$/;
+const tempDir = (c: Ctx) => c.env.TEMP || c.env.TMP || join(c.env.LOCALAPPDATA ?? join(c.home, 'AppData', 'Local'), 'Temp');
+
+/** Windows: copies moved aside by an earlier uninstall, deleted now if they have stopped running. */
+function sweepAside(c: Ctx): void {
+  if (!c.win) return;
+  try {
+    for (const name of readdirSync(tempDir(c))) if (ASIDE.test(name)) rmSync(join(tempDir(c), name), { force: true });
+  } catch {
+    // Still running, or no temp folder: next time.
+  }
 }
 
 /**
  * Uninstall MCatzP, the same from every app and from `mcatzp uninstall`: the entries that run the copy in use leave
  * their clients, then the shared copy goes (and its bin folder, once empty). A copy Homebrew or npm put somewhere else
- * is theirs to remove: it is kept, and its path returned. Entries running something else (npx) are not ours: kept.
- * Each app's own switch and approvals stay in its settings.
+ * is theirs to remove: it is kept, and its path and remove command returned. Entries running something else (npx) are
+ * not ours: kept. Each app's own switch and approvals stay in its settings.
  */
 export async function uninstall(o: SetupOptions): Promise<McatzpUninstall> {
   const c = ctx(o);
+  sweepAside(c);
   const found = await findInstalled(o);
   const removedFrom: McatzpTargetId[] = [];
   const failed: McatzpUninstall['failed'] = [];
@@ -539,17 +570,25 @@ export async function uninstall(o: SetupOptions): Promise<McatzpUninstall> {
       failed.push({ id: t.id, error: (e as Error).message });
     }
   }
-  if (!found.path) return { removedFrom, failed, binary: 'none', keptPath: null };
-  if (found.source !== 'catzoid') return { removedFrom, failed, binary: 'kept', keptPath: found.path };
+  const base = { removedFrom, failed, keptPath: null, removeCommand: null, movedAside: null };
+  if (!found.path) return { ...base, binary: 'none' };
+  if (found.source !== 'catzoid') return { ...base, binary: 'kept', keptPath: found.path, removeCommand: removeCommandOf(found.source, found.path) };
   const target = installPath(o);
   const dir = dirname(target);
+  let movedAside: string | null = null;
   const release = takeLock(dir);
   try {
     rmSync(target, { force: true });
   } catch (e) {
-    // Windows keeps a running .exe locked.
-    if (c.win) throw new Error('MCatzP is in use: close the AI assistant using it, then try again');
-    throw e;
+    if (!c.win) throw e;
+    // Windows cannot delete a running .exe, but it can move it.
+    const aside = join(tempDir(c), `mcatzp-${randomBytes(4).toString('hex')}.exe.old`);
+    try {
+      renameSync(target, aside);
+      movedAside = aside;
+    } catch {
+      throw new Error('MCatzP is in use: close the AI assistant using it, then try again');
+    }
   } finally {
     release();
   }
@@ -558,7 +597,7 @@ export async function uninstall(o: SetupOptions): Promise<McatzpUninstall> {
   } catch {
     // Something else is there, or it is gone already: either way the folder stays as it is.
   }
-  return { removedFrom, failed, binary: 'removed', keptPath: null };
+  return { ...base, binary: 'removed', movedAside };
 }
 
 /** The four apps, by the folder each keeps its bridge.json in. */
