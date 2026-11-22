@@ -1,0 +1,101 @@
+# npm: @catzoid/mcatzp-protocol, @catzoid/mcatzp-host and mcatzp are published when a release is published, or by hand:
+#   gh workflow run publish-npm.yml -f tag=v1.0.6
+# It builds the three packages from the release's tag and publishes them in dependency order (protocol, host, mcatzp),
+# skipping any version that is on npm already (a release rebuilt for new zips publishes nothing twice).
+# fakecat is private and stays out. The release zips, SHA256SUMS and the Homebrew formula stay as they are: built,
+# signed and notarized on the Mac (bun run release), the formula bumped with HomebrewCatz/scripts/bump.sh.
+#
+# Signing in to npm, one of:
+#   - Trusted publishing (no secret to keep, no 2FA per package): each package trusts this workflow, set up once from
+#     the Mac with `npm trust github <package> --file publish-npm.yml --repo catzoidhub/MCatzP --allow-publish --yes`.
+#     npm then takes this run's identity (id-token below) and adds a provenance statement by itself.
+#   - A repository secret NPM_TOKEN (a granular token allowed to publish the three): used when it is set.
+name: Publish npm
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Release tag to publish (e.g. v1.0.6)
+        required: true
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: publish-npm
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ inputs.tag || github.event.release.tag_name }}
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.3
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      # Trusted publishing needs npm 11.5.1 or later.
+      - run: npm install -g npm@latest
+
+      - run: bun install --frozen-lockfile
+
+      - name: The tag and the packages agree
+        run: |
+          tag="${{ inputs.tag || github.event.release.tag_name }}"
+          v=$(node -p "require('./packages/server/package.json').version")
+          if [ "v$v" != "$tag" ]; then echo "::error::The tag is $tag but mcatzp's package.json says $v"; exit 1; fi
+          for p in protocol host; do
+            pv=$(node -p "require('./packages/$p/package.json').version")
+            if [ "$pv" != "$v" ]; then echo "::error::packages/$p is $pv, mcatzp is $v"; exit 1; fi
+          done
+          sv=$(sed -n "s/^export const VERSION = '\(.*\)';/\1/p" packages/server/src/version.ts)
+          if [ "$sv" != "$v" ]; then echo "::error::packages/server/src/version.ts says $sv, package.json $v"; exit 1; fi
+          echo "VERSION=$v" >> "$GITHUB_ENV"
+
+      - run: bun run typecheck
+      - run: bun run build
+      - name: Tests
+        run: bun test
+
+      # bun pm pack writes the workspace:* dependencies as the versions in bun.lock; npm publish would not.
+      - name: Pack
+        run: |
+          mkdir -p dist/npm
+          for p in protocol host server; do (cd packages/$p && bun pm pack --destination ../../dist/npm); done
+          ls -l dist/npm
+
+      - name: The packages are whole
+        run: |
+          for t in catzoid-mcatzp-protocol catzoid-mcatzp-host mcatzp; do
+            f=dist/npm/$t-$VERSION.tgz
+            test -f "$f" || { echo "::error::$f is missing"; exit 1; }
+            pj=$(tar -xOzf "$f" package/package.json)
+            if echo "$pj" | grep -q 'workspace:'; then echo "::error::$f still says workspace:"; exit 1; fi
+            tar -tzf "$f" | grep -q '^package/dist/index.js$' || { echo "::error::$f has no dist/index.js"; exit 1; }
+          done
+          tar -xOzf dist/npm/mcatzp-$VERSION.tgz package/package.json | grep -q '"@catzoid/mcatzp-host": "'"$VERSION"'"'
+          test "$(bun packages/server/dist/index.js --version)" = "$VERSION"
+
+      - name: Publish (each unless its version is on npm already)
+        env:
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          if [ -n "$NPM_TOKEN" ]; then echo "//registry.npmjs.org/:_authToken=$NPM_TOKEN" > "$HOME/.npmrc"; fi
+          for pair in "@catzoid/mcatzp-protocol catzoid-mcatzp-protocol" "@catzoid/mcatzp-host catzoid-mcatzp-host" "mcatzp mcatzp"; do
+            set -- $pair
+            if npm view "$1@$VERSION" version >/dev/null 2>&1; then
+              echo "$1@$VERSION is on npm already: nothing to publish."
+              continue
+            fi
+            npm publish "./dist/npm/$2-$VERSION.tgz" --access public
+          done
