@@ -77,13 +77,13 @@ actions run at once inside what you shared; changes ask in the app; destructive 
 ## What the cats offer
 
 MCatzP takes each tool list from the app itself, so a new app version brings its new tools with no new MCatzP. Today
-that is **573 tools**, plus `mcatzp_status` (which cats are reachable, and why the others are not):
+that is **590 tools**, plus `mcatzp_status` (which cats are reachable, and why the others are not):
 
 | Cat | Tools | What your assistant can do |
 | --- | --- | --- |
-| DevCatz | 267 | Sites, runtimes, services, databases, Git, Docker files, search, storage and sharing; its mock servers, and a site's sockets opened in DialCatz |
+| DevCatz | 276 | Sites, runtimes, services, databases, Git, Docker files, search, storage and sharing; its mock servers, and a site's sockets opened in DialCatz |
 | DBCatz | 46 | Connections, databases, tables and keys; read queries at once, writes you confirm; export, backup and import |
-| DialCatz | 155 | Workspaces, requests, environments and runs; OpenAPI specs followed and checked, mock servers, and other protocols (WebSocket, Socket.IO, Pusher, gRPC) |
+| DialCatz | 163 | Workspaces, requests, environments and runs; imports from Postman, Bruno, Insomnia, Hoppscotch and Yaak; OpenAPI specs followed and checked, mock servers, CI workflows, and other protocols (WebSocket, Socket.IO, Pusher, gRPC) |
 | DoCatz | 105 | Containers, compose projects, images, volumes, builds and the engine; local Kubernetes, mock servers and socket services opened in DialCatz |
 
 Every tool, with its tier and inputs: [catzoid.com/docs/mcatzp/tools](https://catzoid.com/docs/mcatzp/tools).
